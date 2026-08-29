@@ -6,6 +6,12 @@ COPY apps ./apps
 COPY packages ./packages
 COPY infra ./infra
 COPY tsconfig.base.json tsconfig.json ./
+# better-sqlite3 falls back to a native build when a matching prebuild is
+# unavailable. Keep the builder self-contained so CI and ECS use the same
+# reproducible toolchain.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 RUN npm ci
 COPY . .
 RUN npm run build
