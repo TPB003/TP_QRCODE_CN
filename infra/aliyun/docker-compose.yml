@@ -1,0 +1,52 @@
+services:
+  tpqr-migrate:
+    build:
+      context: ../..
+      dockerfile: infra/aliyun/Dockerfile
+      target: api
+    env_file:
+      - path: ${TPQR_RUNTIME_ENV_FILE:-../../.env}
+        required: false
+    command: ["npm", "run", "db:migrate:remote"]
+    volumes:
+      - tpqr-data:/data/tpqr
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/aliyun/Dockerfile
+      target: api
+    env_file:
+      - path: ${TPQR_RUNTIME_ENV_FILE:-../../.env}
+        required: false
+    depends_on:
+      tpqr-migrate:
+        condition: service_completed_successfully
+    expose:
+      - "8787"
+    volumes:
+      - tpqr-data:/data/tpqr
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  tpqr-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/aliyun/Dockerfile
+      target: gateway
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  tpqr-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,53 @@
+name: Release to Aliyun
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub Environment to deploy
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: release-preflight
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:all
+      - run: npm run check:opensource
+      - run: docker build -f infra/aliyun/Dockerfile -t tpqr-cn:${{ github.sha }} .
+
+  deploy:
+    name: deploy-to-ecs
+    needs: preflight
+    if: ${{ vars.ALIYUN_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Deploy using the protected environment command
+        env:
+          DEPLOY_COMMAND: ${{ secrets.ALIYUN_DEPLOY_COMMAND }}
+        run: |
+          test -n "$DEPLOY_COMMAND"
+          echo "Running the protected Aliyun deployment command"
+          bash -c "$DEPLOY_COMMAND"
+
+  not-configured:
+    name: deployment-not-configured
+    needs: preflight
+    if: ${{ vars.ALIYUN_DEPLOY_ENABLED != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Preflight passed. Configure the protected Aliyun environment before enabling deployment."

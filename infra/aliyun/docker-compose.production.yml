@@ -1,0 +1,7 @@
+services:
+  tpqr-gateway:
+    environment:
+      TPQR_DOMAIN: ${TPQR_DOMAIN:?set TPQR_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
