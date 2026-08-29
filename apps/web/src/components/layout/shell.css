@@ -1,0 +1,162 @@
+.app-shell,
+.project-shell {
+  min-height: 100vh;
+  background-color: var(--paper);
+  background-image: linear-gradient(rgba(242, 239, 232, 0.88), rgba(242, 239, 232, 0.88)), var(--paper-texture);
+  background-size: auto, 760px 760px;
+}
+
+.app-topbar,
+.project-topbar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--stage);
+  color: var(--paper);
+}
+
+.app-topbar > a,
+.project-topbar > a { text-decoration: none; }
+.app-topbar > div { display: flex; align-items: center; gap: 12px; }
+.app-topbar > div a,
+.app-topbar > div button { display: flex; align-items: center; gap: 7px; margin-left: 26px; border: 0; background: transparent; color: rgba(242, 239, 232, 0.66); text-decoration: none; cursor: pointer; }
+.app-topbar__account > span { max-width: min(34vw, 280px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-topbar svg { width: 21px; }
+.project-topbar { justify-content: flex-start; gap: 26px; font-family: var(--font-mono); }
+.project-topbar > span { margin-left: auto; color: rgba(242, 239, 232, 0.54); font-size: 11px; }
+.project-topbar__account { display: flex; align-items: center; gap: 6px; margin-left: 18px !important; white-space: nowrap; }
+.project-topbar__account svg { width: 18px; }
+
+.app-sidebar,
+.project-sidebar {
+  position: fixed;
+  top: 64px;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  width: 176px;
+  background: var(--stage);
+  color: var(--paper);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-sidebar nav,
+.project-sidebar nav { display: grid; padding-top: 44px; }
+.app-sidebar a,
+.project-sidebar a { display: flex; min-height: 76px; align-items: center; gap: 15px; padding: 0 28px; color: rgba(242, 239, 232, 0.72); font-weight: 700; text-decoration: none; }
+.app-sidebar a svg,
+.project-sidebar a svg { width: 23px; }
+.app-sidebar a.active,
+.project-sidebar a.active { position: relative; background: linear-gradient(90deg, rgba(37, 99, 235, 0.7), transparent); color: white; }
+.app-sidebar a.active::after,
+.project-sidebar a.active::after { position: absolute; top: 0; right: 0; bottom: 0; width: 4px; background: var(--cobalt); content: ""; }
+
+.app-shell__content,
+.project-shell__content { min-height: 100vh; margin-left: 176px; padding-top: 64px; }
+.route-loading { display: grid; min-height: 100vh; place-items: center; background: var(--paper); color: var(--stage); font-family: var(--font-mono); }
+.shell-account-card { display: none; }
+
+@media (max-width: 860px) {
+  .app-sidebar,
+  .project-sidebar { top: auto; right: 0; width: auto; height: 66px; }
+  .app-sidebar nav,
+  .project-sidebar nav { display: flex; height: 100%; justify-content: space-around; padding: 0; }
+  .app-sidebar a,
+  .project-sidebar a { min-width: 64px; min-height: 66px; justify-content: center; padding: 0 10px; }
+  .app-sidebar a span,
+  .project-sidebar a span { display: none; }
+  .app-sidebar a { font-size: 0; }
+  .project-sidebar a { font-size: 0; }
+  .app-sidebar a.active::after,
+  .project-sidebar a.active::after { top: 0; right: 0; bottom: auto; left: 0; width: auto; height: 3px; }
+  .app-shell__content,
+  .project-shell__content { margin-left: 0; padding-bottom: 66px; }
+  .project-topbar > span { display: none; }
+}
+
+/* Responsive navigation: the drawer is the single source of truth on small screens. */
+.shell-menu-button {
+  display: none;
+  width: 44px;
+  height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(242, 239, 232, 0.3);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+}
+.shell-menu-button span { display: block; width: 18px; height: 2px; background: currentColor; }
+.shell-drawer-backdrop { display: none; }
+
+@media (max-width: 860px) {
+  .app-topbar, .project-topbar { height: 60px; padding: 0 16px; }
+  .app-topbar__account { display: flex !important; max-width: min(42vw, 160px); gap: 6px; }
+  .app-topbar__account > span { max-width: 112px; font-size: 12px; }
+  .app-topbar__account > button { display: none; }
+  .project-topbar { gap: 12px; }
+  .project-topbar > strong { font-size: 14px; }
+  .project-topbar__brand { display: none; }
+  .project-topbar__account { display: flex !important; max-width: 38vw; overflow: hidden; margin-left: auto !important; text-overflow: ellipsis; }
+  .project-topbar__account svg { flex: 0 0 auto; }
+  .shell-menu-button { display: inline-flex; margin-left: auto; }
+  .app-sidebar, .project-sidebar {
+    top: 60px;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    width: min(82vw, 300px);
+    height: auto;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    box-shadow: 14px 0 40px rgba(0,0,0,.3);
+  }
+  .app-sidebar.is-open, .project-sidebar.is-open { transform: translateX(0); }
+  .app-sidebar nav, .project-sidebar nav { display: grid; padding: 18px 12px; }
+  .app-sidebar a, .project-sidebar a {
+    min-width: 0;
+    min-height: 52px;
+    justify-content: flex-start;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  .app-sidebar a span, .project-sidebar a span { display: inline; }
+  .app-sidebar a svg, .project-sidebar a svg { width: 20px; flex: 0 0 20px; }
+  .app-sidebar a.active::after, .project-sidebar a.active::after { top: 8px; right: 0; bottom: 8px; left: auto; width: 3px; height: auto; }
+  .shell-drawer-backdrop { display: block; position: fixed; inset: 60px 0 0; z-index: 19; border: 0; background: rgba(8,11,13,.52); cursor: pointer; }
+  .app-sidebar, .project-sidebar { z-index: 20; }
+  .app-shell__content, .project-shell__content { padding-top: 60px; padding-bottom: 24px; }
+  .shell-account-card {
+    display: grid;
+    gap: 12px;
+    margin: auto 12px 16px;
+    padding: 14px;
+    border: 1px solid rgba(242, 239, 232, 0.2);
+    border-radius: 8px;
+    background: rgba(242, 239, 232, 0.08);
+    color: var(--paper);
+  }
+  .shell-account-card__identity { display: flex; min-width: 0; align-items: center; gap: 10px; }
+  .shell-account-card__identity > svg { flex: 0 0 auto; width: 22px; }
+  .shell-account-card__identity > div { display: grid; min-width: 0; gap: 3px; }
+  .shell-account-card__identity strong { font-size: 14px; }
+  .shell-account-card__identity span { overflow: hidden; color: rgba(242, 239, 232, 0.68); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .shell-account-card__logout { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(242, 239, 232, 0.36); border-radius: 6px; background: transparent; color: var(--paper); font-weight: 700; cursor: pointer; }
+  .shell-account-card__logout:hover, .shell-account-card__logout:focus-visible { border-color: var(--paper); background: rgba(242, 239, 232, 0.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar, .project-sidebar { transition: none; }
+}

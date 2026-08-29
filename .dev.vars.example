@@ -1,0 +1,8 @@
+# Legacy-friendly local environment template. The Node API reads .env instead.
+ENVIRONMENT=development
+APP_ORIGIN=http://127.0.0.1:5173
+PUBLIC_QR_ORIGIN=http://127.0.0.1:5173
+AUTH_OAUTH_CALLBACK_ORIGIN=http://127.0.0.1:8787
+AUTH_DELIVERY_MODE=dev
+AUTH_TEST_CODE=123456
+AUTH_ALLOWED_EMAILS=*

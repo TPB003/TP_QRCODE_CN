@@ -1,0 +1,11 @@
+{$TPQR_DOMAIN} {
+  encode gzip
+  @api path /api/*
+  reverse_proxy @api api:8787 {
+    header_up X-Real-IP {remote_host}
+  }
+
+  root * /srv
+  try_files {path} /index.html
+  file_server
+}
