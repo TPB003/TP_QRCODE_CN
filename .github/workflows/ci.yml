@@ -108,7 +108,11 @@ jobs:
         run: |
           trap 'docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml down -v' EXIT
           docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml up -d --build
-          curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8080/api/health
+          if ! curl --fail --retry 10 --retry-all-errors --retry-delay 2 http://127.0.0.1:8080/api/health; then
+            docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml ps
+            docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml logs --no-color
+            exit 1
+          fi
 
   opensource-boundary:
     name: opensource-boundary
