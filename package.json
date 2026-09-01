@@ -65,7 +65,7 @@
     "hono": "4.13.1",
     "jszip": "3.10.1",
     "lucide-react": "1.31.0",
-    "papaparse": "5.5.4",
+    "papaparse": "5.7.0",
     "qr-code-styling": "1.9.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
