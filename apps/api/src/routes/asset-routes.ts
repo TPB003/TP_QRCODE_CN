@@ -39,6 +39,7 @@ function hasExpectedMagic(type: string, input: ArrayBuffer): boolean {
   if (type === "image/gif") return starts([0x47, 0x49, 0x46, 0x38]);
   if (type === "application/pdf") return starts([0x25, 0x50, 0x44, 0x46]);
   if (type === "video/mp4") return bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+  if (type === "video/quicktime") return bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70 && bytes[8] === 0x71 && bytes[9] === 0x74;
   if (type === "video/webm") return starts([0x1a, 0x45, 0xdf, 0xa3]);
   if (type === "audio/mpeg") return starts([0x49, 0x44, 0x33]) || (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
   if (type === "audio/mp4") return bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;

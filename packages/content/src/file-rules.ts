@@ -7,6 +7,7 @@ const MAGIC: Record<string, Uint8Array[]> = {
   "image/gif": [Uint8Array.from([0x47, 0x49, 0x46, 0x38])],
   "application/pdf": [Uint8Array.from([0x25, 0x50, 0x44, 0x46])],
   "video/mp4": [Uint8Array.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70])],
+  "video/quicktime": [Uint8Array.from([0x66, 0x74, 0x79, 0x70])],
   "audio/ogg": [Uint8Array.from([0x4f, 0x67, 0x67, 0x53])],
   "audio/wav": [Uint8Array.from([0x52, 0x49, 0x46, 0x46])],
 };
@@ -17,6 +18,7 @@ export const FILE_RULES: Record<string, FileRule> = {
   "image/webp": { mime: "image/webp", extensions: [".webp"], maxBytes: 10 * 1024 * 1024 },
   "image/gif": { mime: "image/gif", extensions: [".gif"], maxBytes: 10 * 1024 * 1024, magic: MAGIC["image/gif"] },
   "video/mp4": { mime: "video/mp4", extensions: [".mp4"], maxBytes: 50 * 1024 * 1024, magic: MAGIC["video/mp4"] },
+  "video/quicktime": { mime: "video/quicktime", extensions: [".mov"], maxBytes: 50 * 1024 * 1024, magic: MAGIC["video/quicktime"] },
   "video/webm": { mime: "video/webm", extensions: [".webm"], maxBytes: 50 * 1024 * 1024 },
   "audio/mpeg": { mime: "audio/mpeg", extensions: [".mp3"], maxBytes: 50 * 1024 * 1024 },
   "audio/mp4": { mime: "audio/mp4", extensions: [".m4a"], maxBytes: 50 * 1024 * 1024 },
@@ -36,7 +38,9 @@ export function validateFile(file: { name: string; type: string; size: number },
   if (file.size > rule.maxBytes) return { ok: false, reason: "SIZE" };
   const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
   if (!rule.extensions.includes(extension)) return { ok: false, reason: "EXTENSION" };
-  if (header && rule.magic && !rule.magic.some((signature) => startsWithBytes(header, signature))) return { ok: false, reason: "MAGIC" };
+  if (header && rule.magic && !(file.type === "video/quicktime"
+    ? header.length >= 12 && rule.magic.some((signature) => signature.every((byte, i) => header[i + 4] === byte)) && header[8] === 0x71 && header[9] === 0x74
+    : rule.magic.some((signature) => startsWithBytes(header, signature)))) return { ok: false, reason: "MAGIC" };
   return { ok: true };
 }
 export function getFileRule(mime: string): FileRule | undefined { return FILE_RULES[mime]; }

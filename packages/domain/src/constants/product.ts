@@ -49,6 +49,7 @@ export const ALLOWED_MEDIA_TYPES = [
   "image/gif",
   "video/mp4",
   "video/webm",
+  "video/quicktime",
   "audio/mpeg",
   "audio/mp4",
   "audio/wav",

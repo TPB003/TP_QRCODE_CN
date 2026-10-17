@@ -39,4 +39,11 @@ describe("file validation", () => {
     expect(validateFile({ ...png, type: "application/octet-stream" })).toMatchObject({ ok: false, reason: "MIME" });
     expect(validateFile(png, Uint8Array.from([0x00, 0x00]))).toMatchObject({ ok: false, reason: "MAGIC" });
   });
+
+  it("accepts QuickTime MOV only when the container brand matches", () => {
+    const mov = { name: "clip.mov", type: "video/quicktime", size: 1_024 };
+    expect(validateFile(mov, Uint8Array.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20]))).toEqual({ ok: true });
+    expect(validateFile({ ...mov, name: "clip.mp4" }, Uint8Array.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20]))).toMatchObject({ ok: false, reason: "EXTENSION" });
+    expect(validateFile(mov, Uint8Array.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]))).toMatchObject({ ok: false, reason: "MAGIC" });
+  });
 });

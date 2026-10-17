@@ -261,7 +261,7 @@ codeRoutes.post("/codes/:codeId/assets", async (c) => {
   const id = idSchema.safeParse(c.req.param("codeId")); if (!id.success || !(await ownedCode(c, id.data, user.id))) return apiError(c, 404, "NOT_FOUND", "活码不存在");
   const form = await c.req.formData(); const file = form.get("file"); if (!(file instanceof File)) return apiError(c, 422, "VALIDATION_ERROR", "请选择文件");
   const max = file.type.startsWith("video/") || file.type.startsWith("audio/") ? 50 * 1024 * 1024 : file.type === "application/pdf" ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
-  const allowed = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm)|audio\/(mpeg|mp4|wav|ogg)|application\/pdf|text\/plain)$/;
+  const allowed = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mpeg|mp4|wav|ogg)|application\/pdf|text\/plain)$/;
   if (!allowed.test(file.type) || file.size > max) return apiError(c, 413, "UPLOAD_REJECTED", "文件类型或大小不符合限制");
   const bytes = await file.arrayBuffer();
   if (!hasExpectedMagic(file.type, bytes)) return apiError(c, 422, "UPLOAD_REJECTED", "文件内容与 MIME 类型不匹配");
@@ -351,7 +351,7 @@ async function incrementCodeAnalytics(c: AppContext, codeId: string, field: "sca
 function extensionForMime(contentType: string): string {
   const extension = ({
     "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
-    "video/mp4": "mp4", "video/webm": "webm", "audio/mpeg": "mp3", "audio/mp4": "m4a",
+    "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "audio/mpeg": "mp3", "audio/mp4": "m4a",
     "audio/wav": "wav", "audio/ogg": "ogg", "application/pdf": "pdf", "text/plain": "txt",
   } as Record<string, string>)[contentType];
   return extension ?? "bin";
@@ -392,6 +392,7 @@ function hasExpectedMagic(type: string, input: ArrayBuffer): boolean {
   if (type === "image/gif") return starts([0x47, 0x49, 0x46, 0x38]);
   if (type === "application/pdf") return starts([0x25, 0x50, 0x44, 0x46]);
   if (type === "video/mp4") return bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;
+  if (type === "video/quicktime") return bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70 && bytes[8] === 0x71 && bytes[9] === 0x74;
   if (type === "video/webm") return starts([0x1a, 0x45, 0xdf, 0xa3]);
   if (type === "audio/mpeg") return starts([0x49, 0x44, 0x33]) || (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
   if (type === "audio/mp4") return bytes.length >= 8 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70;

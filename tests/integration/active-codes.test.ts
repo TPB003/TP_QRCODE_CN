@@ -113,6 +113,7 @@ describe("active QR code API", () => {
     const media: Array<{ type: "image" | "video" | "audio" | "file"; mime: string; name: string; bytes: number[] }> = [
       { type: "image", mime: "image/png", name: "pixel.png", bytes: [0x89, 0x50, 0x4e, 0x47] },
       { type: "video", mime: "video/mp4", name: "clip.mp4", bytes: [0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70] },
+      { type: "video", mime: "video/quicktime", name: "clip.mov", bytes: [0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20] },
       { type: "audio", mime: "audio/mpeg", name: "sound.mp3", bytes: [0x49, 0x44, 0x33] },
       { type: "file", mime: "application/pdf", name: "brief.pdf", bytes: [0x25, 0x50, 0x44, 0x46] },
     ];
@@ -151,6 +152,16 @@ describe("active QR code API", () => {
     const rejected = await SELF.fetch(`http://local/api/codes/${code.id}/assets`, { method: "POST", headers: { Cookie: owner }, body: invalid });
     expect(rejected.status).toBe(422);
     expect((await json<{ error: { code: string } }>(rejected)).error.code).toBe("UPLOAD_REJECTED");
+
+    const invalidQuickTime = new FormData();
+    invalidQuickTime.set("file", new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])], "not-a-mov.mov", { type: "video/quicktime" }));
+    const rejectedQuickTime = await SELF.fetch(`http://local/api/codes/${code.id}/assets`, { method: "POST", headers: { Cookie: owner }, body: invalidQuickTime });
+    expect(rejectedQuickTime.status).toBe(422);
+
+    const validQuickTime = new FormData();
+    validQuickTime.set("file", new File([new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20])], "clip.mov", { type: "video/quicktime" }));
+    const acceptedQuickTime = await SELF.fetch("http://local/api/assets", { method: "POST", headers: { Cookie: owner }, body: validQuickTime });
+    expect(acceptedQuickTime.status).toBe(201);
 
     const upload = new FormData();
     upload.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "pixel.png", { type: "image/png" }));
