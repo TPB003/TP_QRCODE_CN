@@ -84,6 +84,7 @@ test.describe("TP QR 本地核心流程", () => {
     const codeResponse = await page.request.get(`/api/codes/${codeId}`);
     const code = (await json<Code>(codeResponse)).data;
     expect(code?.publishedVersionId).toBeTruthy();
+    await expect(page.locator(".tp-version-track__labels span").first()).toHaveText(`已发布 revision ${code?.revision}`);
     await page.goto(`/s/${code?.slug}`);
     await expect(page.locator(".public-content-card > .public-content-card__title h1")).toHaveText("浏览器文字验收");
     await expect(page.getByText("桌面与移动端均可访问的公共文字内容")).toBeVisible();

@@ -336,7 +336,7 @@
   to { transform: translateY(min(306px, 76vw)); opacity: .16; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px) and (prefers-reduced-motion: no-preference) {
   .tp-qr-paper::after { animation-name: tp-qr-scan-mobile; }
 }
 
@@ -360,6 +360,14 @@
   background: var(--paper-bright);
   box-shadow: 0 24px 64px rgba(0, 0, 0, .42);
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .tp-preview-modal { animation: tp-preview-fade-in var(--dur-fast) ease-out; }
+  .tp-preview-modal__surface { animation: tp-preview-settle var(--dur-med) var(--ease-paper); }
+}
+
+@keyframes tp-preview-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tp-preview-settle { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
 .tp-preview-modal__close {
   position: absolute;

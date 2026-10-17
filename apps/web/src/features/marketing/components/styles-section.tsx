@@ -22,7 +22,7 @@ export function StylesSection() {
         <CalibrationMark className="styles-section__mark" />
         <div className="styles-section__heading">
           <h2>内容可以变化，识别保持清晰</h2>
-          <p>文本、网址与图片共用同一套动态发布流程。</p>
+          <p>文字、网址与图片共用同一套动态发布流程。</p>
         </div>
 
         <div className="style-content-tabs" role="tablist" aria-label="二维码内容类型">

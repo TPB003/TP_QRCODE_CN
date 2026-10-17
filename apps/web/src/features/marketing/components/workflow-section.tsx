@@ -16,7 +16,7 @@ export function WorkflowSection() {
       <div className="workflow-section__heading">
         <h2>同一个码，更新不重印</h2>
         <p>编辑只影响草稿，发布后公共页面才切换到新版本。</p>
-        <code>PROJECT : TP QR DYNAMIC PUBLISHING<br />MODULE&nbsp; : PUBLISH FLOW<br />VERSION : V3.2.1</code>
+        <code>PROJECT : TP QR DYNAMIC PUBLISHING<br />MODULE&nbsp; : PUBLISH FLOW</code>
       </div>
       <SectionIndex>STEP 02/11</SectionIndex>
 

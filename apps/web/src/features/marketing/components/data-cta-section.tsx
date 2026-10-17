@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, Check, Eye, ShieldCheck } from "lucide-react";
+import { ArrowRight, ChartLine, Check, Eye, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { QrSpecimen } from "@client/components/ui/qr-specimen";
 import { analyticsSeries } from "../model/marketing-data";
@@ -65,7 +65,7 @@ export function DataCtaSection() {
           <h2>每一次扫描，都能回到最新内容</h2>
           <p>发布后链接保持不变，内容可以持续更新，并在后台查看匿名访问趋势。</p>
           <div className="data-cta-section__secondary">
-            <Link to="/app?view=analytics"><BarChart3 />查看扫码统计</Link>
+            <Link to="/app?view=analytics"><ChartLine />查看扫码统计</Link>
             <Link to="/decoder"><Eye />打开解码器</Link>
           </div>
           <div className="login-required-wrap login-required-wrap--data"><Link className="data-cta-section__primary" to="/login">免费创建动态二维码 <ArrowRight /></Link><small className="login-required-note">需登录后使用</small></div>

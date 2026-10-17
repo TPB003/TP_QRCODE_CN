@@ -58,6 +58,8 @@
 .project-sidebar a.active { position: relative; background: linear-gradient(90deg, rgba(37, 99, 235, 0.7), transparent); color: white; }
 .app-sidebar a.active::after,
 .project-sidebar a.active::after { position: absolute; top: 0; right: 0; bottom: 0; width: 4px; background: var(--cobalt); content: ""; }
+.app-sidebar a.active::before,
+.project-sidebar a.active::before { position: absolute; top: 0; right: 1px; width: 2px; height: 28%; background: #fff; content: ""; opacity: 0; pointer-events: none; }
 
 .app-shell__content,
 .project-shell__content { min-height: 100vh; margin-left: 176px; padding-top: 64px; }
@@ -119,7 +121,7 @@
     width: min(82vw, 300px);
     height: auto;
     transform: translateX(-105%);
-    transition: transform 180ms ease;
+    transition: transform var(--dur-fast, 160ms) var(--ease-paper, ease);
     box-shadow: 14px 0 40px rgba(0,0,0,.3);
   }
   .app-sidebar.is-open, .project-sidebar.is-open { transform: translateX(0); }
@@ -156,6 +158,23 @@
   .shell-account-card__logout { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(242, 239, 232, 0.36); border-radius: 6px; background: transparent; color: var(--paper); font-weight: 700; cursor: pointer; }
   .shell-account-card__logout:hover, .shell-account-card__logout:focus-visible { border-color: var(--paper); background: rgba(242, 239, 232, 0.12); }
 }
+
+@media (min-width: 861px) and (prefers-reduced-motion: no-preference) {
+  .app-sidebar a.active::before,
+  .project-sidebar a.active::before { animation: shell-active-scan 2.8s var(--ease-paper, ease) infinite; }
+}
+
+@media (max-width: 860px) and (prefers-reduced-motion: no-preference) {
+  .shell-drawer-backdrop { animation: shell-backdrop-in var(--dur-fast, 160ms) ease-out; }
+}
+
+@keyframes shell-active-scan {
+  0% { opacity: 0; transform: translateY(-12px); }
+  25%, 70% { opacity: .8; }
+  100% { opacity: 0; transform: translateY(58px); }
+}
+
+@keyframes shell-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .app-sidebar, .project-sidebar { transition: none; }

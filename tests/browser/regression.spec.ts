@@ -115,6 +115,9 @@ test.describe("second-pass product regressions", () => {
     await expect(page.getByRole("link", { name: /开始创建活码/ })).toHaveAttribute("href", "/login");
     await expect(page.getByRole("link", { name: /免费创建活码/ })).toHaveAttribute("href", "/login");
     await expect(page.getByRole("link", { name: /免费创建动态二维码/ })).toHaveAttribute("href", "/login");
+    await expect(page.locator(".data-cta-section__display")).toHaveCSS("pointer-events", "none");
+    await expect(page.getByText("文字、网址与图片共用同一套动态发布流程。", { exact: true })).toBeVisible();
+    await expect(page.locator(".workflow-section__heading code")).not.toContainText("VERSION");
 
     const example = page.locator(".workflow-step__example");
     await expect(example).toContainText("tpqr.co/AB3xY9");
