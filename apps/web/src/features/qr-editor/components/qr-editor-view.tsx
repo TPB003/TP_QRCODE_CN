@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import type { ActiveContent, PublicContentResponse, QrRenderConfig } from "@tpqr/domain";
 import { buildPublicPayload, DEFAULT_QR_RENDER_CONFIG } from "@tpqr/qr";
 import { ProjectShell } from "@client/components/layout/project-shell";
+import { ConfirmDialog } from "@client/components/ui/confirm-dialog";
 import { ApiClientError, apiClient } from "@client/lib/api-client";
 import { ContentEditor } from "@client/features/content-editor/content-editor";
 import { emptyContent } from "@client/features/content-editor/content-editor-model";
@@ -75,7 +76,7 @@ export function QrEditorView() {
   const { projectId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const requestedType = searchParams.get("type") as ActiveContent["type"] | null;
-  const [code, setCode] = useState<Code | null>(null); const [content, setContent] = useState<ActiveContent>(emptyContent("text")); const [render, setRender] = useState<QrRenderConfig>(DEFAULT_QR_RENDER_CONFIG); const [title, setTitle] = useState("我的活码"); const [notice, setNotice] = useState<EditorNotice | null>(null); const [busy, setBusy] = useState(false); const [uploading, setUploading] = useState(false); const [format, setFormat] = useState<"png" | "svg" | "webp" | "jpg">("png"); const [previewOpen, setPreviewOpen] = useState(false); const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [code, setCode] = useState<Code | null>(null); const [content, setContent] = useState<ActiveContent>(emptyContent("text")); const [render, setRender] = useState<QrRenderConfig>(DEFAULT_QR_RENDER_CONFIG); const [title, setTitle] = useState("我的活码"); const [notice, setNotice] = useState<EditorNotice | null>(null); const [busy, setBusy] = useState(false); const [uploading, setUploading] = useState(false); const [format, setFormat] = useState<"png" | "svg" | "webp" | "jpg">("png"); const [previewOpen, setPreviewOpen] = useState(false); const [publishConfirmOpen, setPublishConfirmOpen] = useState(false); const [publishError, setPublishError] = useState(""); const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const showNotice = (message: string, kind: NoticeKind = "success") => setNotice({ message, kind });
@@ -130,7 +131,7 @@ export function QrEditorView() {
     showNotice(error instanceof ApiClientError && error.code === "REVISION_CONFLICT" ? "内容已被其他窗口修改，请刷新后重试" : error instanceof Error ? error.message : fallback, "error");
   }
   async function saveDraft() { if (!code) return; setBusy(true); setFieldErrors({}); try { const updated = await saveCode(code.id, code.revision, { title, content, render }); setCode(updated); showNotice("草稿已保存", "success"); } catch (error) { handleSaveError(error, "保存失败"); } finally { setBusy(false); } }
-  async function publish() {
+  async function publishConfirmed() {
     if (!code) return;
     const needsAsset = content.type === "image" || content.type === "video" || content.type === "audio" || content.type === "file";
     if (needsAsset && content.assetId.startsWith("00000000")) {
@@ -138,7 +139,7 @@ export function QrEditorView() {
       showNotice("请先选择并上传内容文件", "error");
       return;
     }
-    setBusy(true); setFieldErrors({}); try { const saved = await saveCode(code.id, code.revision, { title, content, render }); const published = await publishCode(code.id, saved.revision); setCode({ ...saved, status: "published", publishedVersionId: published.version.id, publishedVersion: published.version.version }); showNotice(`已发布 V${published.version.version}，新版本立即生效`, "success"); } catch (error) { handleSaveError(error, "发布失败"); } finally { setBusy(false); }
+    setBusy(true); setFieldErrors({}); setPublishError(""); try { const saved = await saveCode(code.id, code.revision, { title, content, render }); const published = await publishCode(code.id, saved.revision); setCode({ ...saved, status: "published", publishedVersionId: published.version.id, publishedVersion: published.version.version }); setPublishConfirmOpen(false); showNotice(`已发布 V${published.version.version}，新版本立即生效`, "success"); } catch (error) { setPublishError(error instanceof Error ? error.message : "发布失败，请重试"); handleSaveError(error, "发布失败"); } finally { setBusy(false); }
   }
   async function exportQr() { if (!code) return; setBusy(true); try { const blob = await qrBlob(payload, render, format); const result = await shareOrDownload(blob, `tp-qr-${code.slug}.${format}`); showNotice(result === "shared" ? "已打开系统分享" : `已下载 ${format.toUpperCase()} 文件`, "success"); } catch (error) { if (!(error instanceof DOMException && error.name === "AbortError")) showNotice(error instanceof Error ? error.message : "下载失败", "error"); } finally { setBusy(false); } }
   const previewData = useMemo<PublicContentResponse | null>(() => {
@@ -159,11 +160,21 @@ export function QrEditorView() {
     <header className="tp-qr-editor__header"><div><span className="index-label">07 / ACTIVE QR</span><h1>活码工作台</h1><p>内容可更新，二维码保持不变。</p></div></header>
     {Object.keys(fieldErrors).length > 0 ? <div className="tp-field-errors" role="alert"><strong>请检查以下字段：</strong>{Object.entries(fieldErrors).map(([key, messages]) => <span key={key}>{key.replace(/^content\./, "")}：{messages.join("、")}</span>)}</div> : null}
     {code ? <div className="tp-qr-editor__grid"><section><label className="tp-title-field"><span>项目名称</span><input value={title} onChange={(e) => setTitle(e.target.value)} /><small>{fieldErrors.title?.[0]}</small></label><ContentEditor value={content} onChange={setContent} onUpload={handleUpload} uploading={uploading} fieldErrors={fieldErrors} /></section><section className="tp-qr-preview"><div className="tp-qr-paper"><QRCodeCanvas data={payload} render={render} /></div><span className="tp-status tp-status--teal"><i />{code.publishedVersionId ? "已发布" : "草稿"} · revision {code.revision}</span><code>{payload}</code><div className="tp-download-row"><select aria-label="下载格式" value={format} onChange={(e) => setFormat(e.target.value as typeof format)}><option value="png">PNG</option><option value="svg">SVG</option><option value="webp">WEBP</option><option value="jpg">JPG</option></select><button type="button" className="button button--primary" disabled={busy} onClick={() => void exportQr()}>{isMobileShare ? <Share2 /> : <Download />}{isMobileShare ? "分享 / 下载" : "下载"}</button></div></section></div> : null}
-    {code ? <aside className="tp-editor-side"><StylePanel render={render} onChange={setRender} onLogoUpload={handleLogoUpload} onClearLogo={() => setRender((current) => ({ ...current, logoAssetId: null }))} uploading={uploading} /><section className="tp-publish-panel" aria-label="发布证明"><header className="tp-publish-panel__header"><div><span className="index-label">03 / PUBLISH PROOF</span><h2>发布证明</h2></div><span className={`tp-publish-panel__state ${code.publishedVersionId ? "is-published" : "is-draft"}`}>{code.publishedVersionId ? "当前已发布" : "草稿未发布"}</span></header><dl className="tp-publish-panel__meta"><div><dt>当前 revision</dt><dd>{code.revision}</dd></div><div><dt>最近保存</dt><dd>{code.updatedAt ? new Date(code.updatedAt).toLocaleString("zh-CN") : "尚未保存"}</dd></div></dl><div className="tp-publish-panel__actions"><button type="button" className="button button--secondary" disabled={!code} onClick={(event) => { previewTriggerRef.current = event.currentTarget; setPreviewOpen(true); }}><Eye />预览</button><button type="button" className="button button--secondary" disabled={busy || !code} onClick={() => void saveDraft()}><Save />保存草稿</button><button type="button" className="button button--teal" disabled={busy || !code} onClick={() => void publish()}><Send />发布</button></div></section></aside> : null}
+    {code ? <aside className="tp-editor-side"><StylePanel render={render} onChange={setRender} onLogoUpload={handleLogoUpload} onClearLogo={() => setRender((current) => ({ ...current, logoAssetId: null }))} uploading={uploading} /><section className="tp-publish-panel" aria-label="发布证明"><header className="tp-publish-panel__header"><div><span className="index-label">03 / PUBLISH PROOF</span><h2>发布证明</h2></div><span className={`tp-publish-panel__state ${code.publishedVersionId ? "is-published" : "is-draft"}`}>{code.publishedVersionId ? "当前已发布" : "草稿未发布"}</span></header><dl className="tp-publish-panel__meta"><div><dt>当前 revision</dt><dd>{code.revision}</dd></div><div><dt>最近保存</dt><dd>{code.updatedAt ? new Date(code.updatedAt).toLocaleString("zh-CN") : "尚未保存"}</dd></div></dl><div className="tp-publish-panel__actions"><button type="button" className="button button--secondary" disabled={!code} onClick={(event) => { previewTriggerRef.current = event.currentTarget; setPreviewOpen(true); }}><Eye />预览</button><button type="button" className="button button--secondary" disabled={busy || !code} onClick={() => void saveDraft()}><Save />保存草稿</button><button type="button" className="button button--teal" disabled={busy || !code} onClick={() => { setPublishError(""); setPublishConfirmOpen(true); }}><Send />发布</button></div></section></aside> : null}
     {code && render.showFrame && render.frameText ? <div className="tp-qr-frame-preview" aria-label="边框说明预览"><span>{render.frameText}</span></div> : null}
     {code ? <section className="tp-version-track" aria-label="版本轨迹"><header><span>版本轨迹</span><span>{code.publishedVersion == null ? "尚未发布" : `V${code.publishedVersion}`}</span></header><div className="tp-version-track__line"><span className="is-done" /><i /><span className={code.publishedVersionId ? "is-published" : ""} /></div><div className="tp-version-track__labels"><span>草稿 revision {code.revision}</span><span>预览</span><span>{code.publishedVersion ? `已发布 V${code.publishedVersion}` : "待发布"}</span></div></section> : null}
     </div>
     {notice ? <p className={`tp-toast tp-toast--${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite"><Check />{notice.message}</p> : null}
+    {code ? <ConfirmDialog
+      open={publishConfirmOpen}
+      onOpenChange={setPublishConfirmOpen}
+      title="确认发布？"
+      description={`将发布 revision ${code.revision + 1} 为 V${(code.publishedVersion ?? 0) + 1}，扫码链接保持不变并立即生效。`}
+      confirmLabel="确认发布"
+      busy={busy}
+      error={publishError}
+      onConfirm={() => void publishConfirmed()}
+    /> : null}
     {previewOpen && previewData ? <div className="tp-preview-modal" role="dialog" aria-modal="true" aria-label="草稿预览" onClick={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><div className="tp-preview-modal__surface"><button ref={previewCloseRef} type="button" className="tp-preview-modal__close" aria-label="关闭预览" onClick={() => setPreviewOpen(false)}><X size={20} aria-hidden="true" /><span>关闭预览</span></button><PublicContentFrame data={previewData} /></div></div> : null}
   </main></ProjectShell>;
 }

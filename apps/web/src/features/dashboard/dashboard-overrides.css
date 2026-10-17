@@ -1,3 +1,6 @@
+.dashboard-trend__controls, .dashboard-trend__metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.dashboard-trend__controls button, .dashboard-trend__metrics button { min-height: 38px; padding: 0 13px; border: 1px solid var(--hairline); background: rgba(255,255,255,.36); color: var(--ink); cursor: pointer; }
+.dashboard-trend__controls button[aria-pressed="true"], .dashboard-trend__metrics button[aria-selected="true"] { border-color: var(--cobalt); background: rgba(37,99,235,.1); color: var(--cobalt); font-weight: 800; }
 .dashboard-analytics { grid-column: 1 / -1; padding: 28px; }
 .dashboard-analytics header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .dashboard-analytics h2 { margin: 0; }

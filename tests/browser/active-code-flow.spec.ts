@@ -58,4 +58,34 @@ test.describe("active QR public flow", () => {
     await page.goto(`/s/${code.slug}`);
     await expect(page.getByRole("heading", { name: /页面暂不可用|活码/ })).toBeVisible();
   });
+
+  test("paused published codes are filtered and labeled as paused, then recover as published", async ({ page }, testInfo) => {
+    const email = `browser-paused-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`;
+    await authenticate(page, email);
+    const createdResponse = await page.request.post("/api/codes", { data: { title: "暂停状态验收", content: { type: "text", title: "暂停状态验收", text: "暂停后应返回 404" } } });
+    expect(createdResponse.status()).toBe(201);
+    const code = (await apiJson<{ id: string; slug: string; revision: number }>(createdResponse)).data as { id: string; slug: string; revision: number };
+    expect((await page.request.post(`/api/codes/${code.id}/publish`, { data: { revision: code.revision } })).status()).toBe(200);
+
+    await page.goto(`/app/codes/${code.id}/settings`);
+    await page.getByLabel("访问状态").selectOption("paused");
+    await page.getByRole("button", { name: "保存设置" }).click();
+    await expect(page.getByRole("status")).toContainText("设置已保存");
+    expect((await page.request.get(`/api/public/${code.slug}`)).status()).toBe(404);
+
+    await page.goto("/app");
+    await page.getByRole("button", { name: "已暂停" }).click();
+    const pausedRow = page.locator(".dashboard-table__row").filter({ hasText: "暂停状态验收" });
+    await expect(pausedRow).toContainText("已暂停");
+    await expect(page.getByRole("button", { name: "已暂停" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.goto(`/app/codes/${code.id}/settings`);
+    await page.getByLabel("访问状态").selectOption("active");
+    await page.getByRole("button", { name: "保存设置" }).click();
+    await expect(page.getByRole("status")).toContainText("设置已保存");
+    await page.goto("/app");
+    await page.getByRole("button", { name: "已发布" }).click();
+    const activeRow = page.locator(".dashboard-table__row").filter({ hasText: "暂停状态验收" });
+    await expect(activeRow).toContainText("已发布");
+  });
 });

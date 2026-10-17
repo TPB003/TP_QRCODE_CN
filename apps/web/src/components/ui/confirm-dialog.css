@@ -1,0 +1,78 @@
+.tp-confirm-dialog__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(8, 11, 13, .78);
+  animation: tp-confirm-fade-in var(--dur-fast, 160ms) ease-out;
+}
+
+.tp-confirm-dialog {
+  position: fixed;
+  z-index: 91;
+  top: 50%;
+  left: 50%;
+  width: min(480px, calc(100vw - 32px));
+  padding: clamp(24px, 5vw, 36px);
+  border: 1px solid rgba(15, 23, 42, .18);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 12px 14px 0 var(--cobalt), 0 24px 64px rgba(0, 0, 0, .42);
+  transform: translate(-50%, -50%);
+  animation: tp-confirm-settle var(--dur-med, 260ms) cubic-bezier(.2, .8, .2, 1);
+}
+
+.tp-confirm-dialog__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 6vw, 38px);
+  letter-spacing: -.04em;
+}
+
+.tp-confirm-dialog__description {
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.tp-confirm-dialog__error {
+  margin: 12px 0 0;
+  color: #b42318;
+}
+
+.tp-confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.tp-confirm-dialog__actions .button--secondary {
+  border-color: var(--hairline);
+}
+
+.tp-confirm-dialog__danger {
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+.tp-confirm-dialog__actions .button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+@keyframes tp-confirm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tp-confirm-settle {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-confirm-dialog__overlay,
+  .tp-confirm-dialog { animation: none; }
+}

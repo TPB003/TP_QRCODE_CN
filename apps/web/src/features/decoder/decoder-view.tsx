@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Camera, Image as ImageIcon, ScanLine, StopCircle } from "lucide-react";
+import jsQR from "jsqr";
 import { useNavigate } from "react-router-dom";
 import { classifyDecodedText, stopMediaStream, type DecodedPayload } from "@tpqr/qr";
 import { parseVCard } from "@tpqr/content";
@@ -9,13 +10,69 @@ type Detector = { detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: 
 type DetectorCtor = new (options?: { formats?: string[] }) => Detector;
 function detector() { const ctor = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector; return ctor ? new ctor({ formats: ["qr_code"] }) : null; }
 
+function decodeWithCanvas(source: ImageBitmapSource): string | null {
+  const { width, height } = source instanceof HTMLVideoElement
+    ? { width: source.videoWidth, height: source.videoHeight }
+    : source instanceof HTMLImageElement
+      ? { width: source.naturalWidth, height: source.naturalHeight }
+      : source as { width: number; height: number };
+  if (!width || !height) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(source as CanvasImageSource, 0, 0, width, height);
+  const pixels = context.getImageData(0, 0, width, height);
+  return jsQR(pixels.data, width, height, { inversionAttempts: "attemptBoth" })?.data ?? null;
+}
+
+async function decodeRaw(source: ImageBitmapSource): Promise<string | null> {
+  const reader = detector();
+  if (reader) {
+    try {
+      const value = (await reader.detect(source))[0]?.rawValue;
+      if (value) return value;
+    } catch {
+      // Fall back to the bundled decoder when native detection fails.
+    }
+  }
+  return decodeWithCanvas(source);
+}
+
 export function DecoderView() {
   const navigate = useNavigate(); const videoRef = useRef<HTMLVideoElement>(null); const streamRef = useRef<MediaStream | null>(null); const frameRef = useRef<number | null>(null); const [result, setResult] = useState<DecodedPayload | null>(null); const [notice, setNotice] = useState("上传二维码图片，或开启摄像头"); const [running, setRunning] = useState(false); const [dragging, setDragging] = useState(false);
   useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current); stopMediaStream(streamRef.current); }, []);
   const handleDecoded = (raw: string) => { const decoded = classifyDecodedText(raw); setResult(decoded); if (decoded.kind === "tpqr" && decoded.slug) void navigate(`/s/${decoded.slug}`); else if (decoded.kind === "invalid") setNotice("无法识别此二维码，或内容协议不安全"); else setNotice(decoded.kind === "url" ? "检测到网址，点击确认后打开" : decoded.kind === "vcard" ? "检测到名片，可保存联系人" : "检测到文字"); };
-  async function decodeSource(source: ImageBitmapSource) { const reader = detector(); if (!reader) { setNotice("当前浏览器不支持二维码识别，请使用最新版 Chrome"); return; } try { const values = await reader.detect(source); const value = values[0]?.rawValue; if (value) handleDecoded(value); else setNotice("没有发现二维码"); } catch { setNotice("图片无法识别，请重新拍摄清晰二维码"); } }
-  async function decodeFile(file: File | undefined) { if (!file) return; try { const bitmap = await createImageBitmap(file); await decodeSource(bitmap); bitmap.close(); } catch { setNotice("图片读取失败"); } }
-  async function startCamera() { if (!navigator.mediaDevices?.getUserMedia) { setNotice("当前环境不支持摄像头，请使用 HTTPS 或 localhost"); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }); streamRef.current = stream; if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); } setRunning(true); const read = async () => { if (!streamRef.current || !videoRef.current) return; const reader = detector(); if (reader) { try { const values = await reader.detect(videoRef.current); if (values[0]?.rawValue) { handleDecoded(values[0].rawValue); stopCamera(); return; } } catch { /* camera frame not ready */ } } frameRef.current = requestAnimationFrame(() => void read()); }; frameRef.current = requestAnimationFrame(() => void read()); } catch { setNotice("摄像头权限被拒绝，请允许访问摄像头或改用图片上传"); } }
+  async function decodeSource(source: ImageBitmapSource) {
+    try {
+      const value = await decodeRaw(source);
+      if (value) handleDecoded(value);
+      else setNotice("没有发现二维码");
+    } catch {
+      setNotice("图片无法识别，请重新拍摄清晰二维码");
+    }
+  }
+  async function decodeImageElement(file: File) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("image-load-failed")); image.src = url; });
+      await decodeSource(image);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  async function decodeFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const bitmap = await createImageBitmap(file);
+      try { await decodeSource(bitmap); } finally { bitmap.close(); }
+    } catch {
+      try { await decodeImageElement(file); } catch { setNotice("图片读取失败"); }
+    }
+  }
+  async function startCamera() { if (!navigator.mediaDevices?.getUserMedia) { setNotice("当前环境不支持摄像头，请使用 HTTPS 或 localhost"); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }); streamRef.current = stream; if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); } setRunning(true); const read = async () => { if (!streamRef.current || !videoRef.current) return; try { const value = await decodeRaw(videoRef.current); if (value) { handleDecoded(value); stopCamera(); return; } } catch { /* camera frame not ready */ } frameRef.current = requestAnimationFrame(() => void read()); }; frameRef.current = requestAnimationFrame(() => void read()); } catch { setNotice("摄像头权限被拒绝，请允许访问摄像头或改用图片上传"); } }
   function stopCamera() { if (frameRef.current) cancelAnimationFrame(frameRef.current); frameRef.current = null; stopMediaStream(streamRef.current); streamRef.current = null; if (videoRef.current) videoRef.current.srcObject = null; setRunning(false); }
   function onDrop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); void decodeFile(event.dataTransfer.files[0]); }
   return <main className="decoder-page"><section className="decoder-card"><header><span className="index-label">TP QR / DECODER</span><ScanLine size={28} /></header><h1>解码器</h1><p>识别 TP QR 活码、网址、文字和电子名片。</p><div className="decoder-camera"><video ref={videoRef} muted playsInline aria-label="二维码摄像头取景" />{!running && <div><Camera size={36} /><span>摄像头预览</span></div>}</div><div className="decoder-actions"><button type="button" className="button button--primary" onClick={() => void (running ? stopCamera() : startCamera())}>{running ? <StopCircle /> : <Camera />}{running ? "停止摄像头" : "开启摄像头"}</button><label className="button button--secondary"><ImageIcon />上传图片<input type="file" accept="image/*" onChange={(e) => void decodeFile(e.target.files?.[0])} /></label></div><div className={`decoder-drop ${dragging ? "is-dragging" : ""}`} onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}>拖拽二维码图片到这里</div><p className="decoder-notice" role="status">{notice}</p>{result && <DecoderResult result={result} onNavigate={navigate} />}</section></main>;

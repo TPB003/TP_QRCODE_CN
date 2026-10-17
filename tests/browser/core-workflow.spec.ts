@@ -52,7 +52,16 @@ test.describe("TP QR 本地核心流程", () => {
     await page.getByLabel("正文").fill("桌面与移动端均可访问的公共文字内容");
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("草稿已保存", { exact: true })).toBeVisible();
+    const codeId = page.url().split("/app/codes/")[1].split("/")[0];
     await page.getByRole("button", { name: "发布" }).click();
+    const publishDialog = page.getByRole("dialog", { name: "确认发布？" });
+    await expect(publishDialog).toContainText(/将发布 revision \d+ 为 V1/);
+    await publishDialog.getByRole("button", { name: "取消" }).click();
+    await expect(publishDialog).not.toBeVisible();
+    const unpublished = (await json<Code>(await page.request.get(`/api/codes/${codeId}`))).data;
+    expect(unpublished?.publishedVersionId).toBeFalsy();
+    await page.getByRole("button", { name: "发布" }).click();
+    await page.getByRole("dialog", { name: "确认发布？" }).getByRole("button", { name: "确认发布" }).click();
     await expect(page.getByText(/已发布(?: V\d+)?，新版本立即生效/)).toBeVisible();
 
     if (testInfo.project.name === "mobile") {
@@ -72,7 +81,6 @@ test.describe("TP QR 本地核心流程", () => {
       expect((await fs.stat(downloadedPath)).size).toBeGreaterThan(100);
     }
 
-    const codeId = page.url().split("/app/codes/")[1].split("/")[0];
     const codeResponse = await page.request.get(`/api/codes/${codeId}`);
     const code = (await json<Code>(codeResponse)).data;
     expect(code?.publishedVersionId).toBeTruthy();
@@ -91,6 +99,29 @@ test.describe("TP QR 本地核心流程", () => {
     await expect(page.getByRole("status")).toContainText("设置已保存");
   });
 
+  test("设置页使用应用内删除确认，取消保留活码，确认后回到工作台", async ({ page }, testInfo) => {
+    await authenticateThroughUi(page, `delete-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`);
+    const created = await page.request.post("/api/codes", { data: { title: "删除流程验收", content: { type: "text", title: "删除流程验收", text: "本地测试内容" } } });
+    expect(created.status()).toBe(201);
+    const code = (await json<Code>(created)).data;
+    if (!code) throw new Error("创建删除流程测试活码失败");
+    await page.goto(`/app/codes/${code.id}/settings`);
+
+    await page.getByRole("button", { name: "删除活码" }).click();
+    const deleteDialog = page.getByRole("dialog", { name: "确认删除活码？" });
+    await expect(deleteDialog).toContainText("删除后会保留 30 天，确定继续吗？");
+    await deleteDialog.getByRole("button", { name: "取消" }).click();
+    await expect(deleteDialog).not.toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/app/codes/${code.id}/settings$`));
+    expect((await json<Code>(await page.request.get(`/api/codes/${code.id}`))).data?.id).toBe(code.id);
+
+    await page.getByRole("button", { name: "删除活码" }).click();
+    await page.getByRole("dialog", { name: "确认删除活码？" }).getByRole("button", { name: "确认删除" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+    await page.getByLabel("搜索活码").fill("删除流程验收");
+    await expect(page.getByText("暂无符合条件的活码")).toBeVisible();
+  });
+
   test("图片活码上传、发布和公共资源代理", async ({ page }, testInfo) => {
     await authenticate(page, `media-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`);
     const created = await page.request.post("/api/codes", { data: { title: "图片资源验收", content: { type: "text", title: "等待上传", text: "请上传图片" } } });
@@ -105,6 +136,7 @@ test.describe("TP QR 本地核心流程", () => {
     await page.getByRole("button", { name: "保存草稿" }).click();
     await expect(page.getByText("草稿已保存", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "发布" }).click();
+    await page.getByRole("dialog", { name: "确认发布？" }).getByRole("button", { name: "确认发布" }).click();
     await expect(page.getByText(/已发布(?: V\d+)?，新版本立即生效/)).toBeVisible();
 
     const updated = (await json<Code>(await page.request.get(`/api/codes/${code.id}`))).data;

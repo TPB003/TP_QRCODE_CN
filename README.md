@@ -24,19 +24,21 @@ data, personal QR codes, and generated reports are never committed.
   linking. Google OAuth backend support is retained for later re-enabling, but
   its current UI entry is intentionally hidden.
 - Draft editing, preview, revision checks, immutable publishing, and QR style
-  controls.
+  controls. Publishing and code deletion use in-app confirmation dialogs.
 - Browser-generated PNG, SVG, WEBP, and JPG QR downloads.
 - Private OSS media storage with MIME, file-signature, size, ownership, and
   download-name checks. A local filesystem adapter is used for development and
   tests.
 - Public content pages that adapt naturally to each content type, plus a QR
-  decoder for camera/image input, URLs, text, vCards, and TP QR slugs.
+  decoder for camera/image input, URLs, text, vCards, and TP QR slugs, with a
+  bundled image-decoding fallback when native QR detection is unavailable.
 - Idempotent scan, view, click, download, and play events with rate limits.
+- Per-code and account-wide analytics with 7, 30, and 90 day ranges.
 
 ## User workflow
 
 ```text
-login → create code → choose type → edit draft → preview → publish
+login → create code → choose type → edit draft → preview → confirm publish
       → render/download QR → scan public page → download/share → republish
 ```
 
