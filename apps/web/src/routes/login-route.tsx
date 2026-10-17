@@ -69,7 +69,7 @@ export function Component() {
       <div className="login-divider"><span>或使用邮箱验证码</span></div>
       <label><Mail />邮箱地址<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" autoComplete="email" /></label>
       {requested ? <label>验证码<input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" maxLength={6} placeholder="6 位验证码" autoComplete="one-time-code" /></label> : null}
-      <button type="button" disabled={busy || !email} onClick={() => void handleSubmit()}>{busy ? "处理中…" : requested ? "验证并登录" : "发送验证码"}<ArrowRight /></button>
+      <button className="button button--primary" type="button" disabled={busy || !email} aria-busy={busy} onClick={() => void handleSubmit()}>{busy ? "处理中…" : requested ? "验证并登录" : "发送验证码"}<ArrowRight /></button>
       {notice || new URLSearchParams(location.search).has("oauth_error") ? <small role="status">{notice || "第三方登录未完成，请重试或使用邮箱验证码。"}</small> : null}
       <small>验证码仅用于本次登录，10 分钟内有效。</small>
     </section>

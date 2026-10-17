@@ -46,6 +46,7 @@ export function ConfirmDialog({
               type="button"
               className={`button ${destructive ? "tp-confirm-dialog__danger" : "button--primary"}`}
               disabled={busy}
+              aria-busy={busy}
               onClick={onConfirm}
             >
               {busy ? "处理中…" : confirmLabel}

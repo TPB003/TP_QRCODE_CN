@@ -42,10 +42,13 @@
   font: inherit;
   font-size: 13px;
   font-weight: 800;
+  transition: transform var(--dur-fast) var(--ease-paper), opacity var(--dur-fast) ease;
 }
 
 .tp-content-types button:hover { border-color: var(--cobalt); }
 .tp-content-types button.is-active { background: var(--cobalt); color: #fff; }
+.tp-content-types button:active { transform: translateY(1px); }
+.tp-content-types button.is-active { animation: tp-tab-select var(--dur-med) var(--ease-paper); }
 
 .tp-content-fields { display: grid; gap: 16px; }
 .tp-field-group { display: grid; gap: 14px; }

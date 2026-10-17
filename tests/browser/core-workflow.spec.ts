@@ -122,6 +122,49 @@ test.describe("TP QR 本地核心流程", () => {
     await expect(page.getByText("暂无符合条件的活码")).toBeVisible();
   });
 
+  test("切换内容类型时，非空内容可取消或确认清空", async ({ page }, testInfo) => {
+    await authenticateThroughUi(page, `type-switch-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`);
+    const created = await page.request.post("/api/codes", { data: { title: "类型切换验收", content: { type: "text", title: "类型切换验收", text: "保留这段正文" } } });
+    expect(created.status()).toBe(201);
+    const code = (await json<Code>(created)).data;
+    if (!code) throw new Error("创建类型切换测试活码失败");
+    await page.goto(`/app/codes/${code.id}/qr`);
+    await page.getByRole("tab", { name: "网址" }).click();
+    const dialog = page.getByRole("dialog", { name: "确认切换内容类型？" });
+    await expect(dialog).toContainText("切换类型将清空当前已输入的内容，继续吗？");
+    await dialog.getByRole("button", { name: "取消" }).click();
+    await expect(page.getByLabel("正文")).toHaveValue("保留这段正文");
+
+    await page.getByRole("tab", { name: "网址" }).click();
+    await page.getByRole("dialog", { name: "确认切换内容类型？" }).getByRole("button", { name: "确认切换" }).click();
+    await expect(page.getByRole("tab", { name: "网址" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByLabel("安全网址")).toHaveValue("https://");
+    await page.getByRole("tab", { name: "文字" }).click();
+    await expect(page.getByLabel("正文")).toHaveValue("");
+    await expect(page.getByRole("dialog", { name: "确认切换内容类型？" })).not.toBeVisible();
+  });
+
+  test("离开未保存的样式时给出确认，取消保留编辑页", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "mobile", "样式离开提示使用桌面工作台导航回归");
+    await authenticateThroughUi(page, `style-leave-${Date.now()}-${testInfo.workerIndex}@active.tpqr.test`);
+    const created = await page.request.post("/api/codes", { data: { title: "未保存样式验收", content: { type: "text", title: "未保存样式验收", text: "本地测试内容" } } });
+    expect(created.status()).toBe(201);
+    const code = (await json<Code>(created)).data;
+    if (!code) throw new Error("创建样式离开测试活码失败");
+    await page.goto(`/app/codes/${code.id}/qr`);
+    await page.getByRole("button", { name: "方块", exact: true }).click();
+    await page.getByRole("link", { name: "返回工作台" }).click();
+    const dialog = page.getByRole("dialog", { name: "样式尚未保存" });
+    await expect(dialog).toContainText("离开页面会丢失当前样式修改");
+    await dialog.getByRole("button", { name: "取消" }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/app/codes/${code.id}/qr$`));
+
+    await page.getByRole("link", { name: "返回工作台" }).click();
+    await page.getByRole("dialog", { name: "样式尚未保存" }).getByRole("button", { name: "继续离开" }).click();
+    await expect(page).toHaveURL(/\/app$/);
+  });
+
   test("图片活码上传、发布和公共资源代理", async ({ page }, testInfo) => {
     await authenticate(page, `media-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`);
     const created = await page.request.post("/api/codes", { data: { title: "图片资源验收", content: { type: "text", title: "等待上传", text: "请上传图片" } } });

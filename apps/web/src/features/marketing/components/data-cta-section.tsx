@@ -68,7 +68,7 @@ export function DataCtaSection() {
             <Link to="/app?view=analytics"><BarChart3 />查看扫码统计</Link>
             <Link to="/decoder"><Eye />打开解码器</Link>
           </div>
-          <Link className="data-cta-section__primary" to="/login">免费创建动态二维码 <ArrowRight /></Link>
+          <div className="login-required-wrap login-required-wrap--data"><Link className="data-cta-section__primary" to="/login">免费创建动态二维码 <ArrowRight /></Link><small className="login-required-note">需登录后使用</small></div>
         </div>
         <p className="privacy-note"><ShieldCheck />扫码者免登录<br />后台不保存原始 IP</p>
       </div>

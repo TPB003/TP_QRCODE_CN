@@ -65,7 +65,7 @@ export function HeroSection() {
           )}
         </div>
         <div className="live-generator__preview"><span>实时预览</span><QrSpecimen data={qrData} size={166} logo /></div>
-        <Link className="live-generator__action" to="/login">开始创建活码 <ArrowRight aria-hidden="true" /></Link>
+        <div className="live-generator__action-wrap"><Link className="live-generator__action" to="/login">开始创建活码 <ArrowRight aria-hidden="true" /></Link><small className="login-required-note">需登录后使用</small></div>
       </div>
       <div className="hero-narrative">
         <div className="hero-narrative__glyph" aria-hidden="true">QR</div>
@@ -74,7 +74,7 @@ export function HeroSection() {
           <span className="version-connector" aria-hidden="true"><ArrowRight /></span>
           <ArchiveCard title="02 / 发布结果" accent="red" trailing="□"><dl><div><dt>发布版本</dt><dd>不可变快照</dd></div><div><dt>访问方式</dt><dd>扫码或分享</dd></div><div><dt>状态</dt><dd>按需发布</dd></div></dl><p><StatusDot tone="teal" />发布后保持链接不变</p></ArchiveCard>
         </div>
-        <div className="hero-narrative__copy"><h1>一个二维码，<br />内容随时更新</h1><p>图片、视频、音频、文件、网址、名片和文字，都能在同一个活码里持续更新。</p><div className="hero-narrative__actions"><Link className="button button--primary" to="/login">免费创建活码 <ArrowRight size={20} /></Link><a href="#templates">查看七类内容</a></div></div>
+        <div className="hero-narrative__copy"><h1>一个二维码，<br />内容随时更新</h1><p>图片、视频、音频、文件、网址、名片和文字，都能在同一个活码里持续更新。</p><div className="hero-narrative__actions"><div className="login-required-wrap"><Link className="button button--primary" to="/login">免费创建活码 <ArrowRight size={20} /></Link><small className="login-required-note">需登录后使用</small></div><a href="#templates">查看七类内容</a></div></div>
       </div>
     </section>
   );

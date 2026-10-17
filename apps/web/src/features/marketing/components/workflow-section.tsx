@@ -28,7 +28,7 @@ export function WorkflowSection() {
               {index === 0 ? (
                 <div className="workflow-step__fixed">
                   <QrSpecimen data="/s/AB3xY9" size={150} />
-                  <p><strong>短链接（不变）</strong><br /><a href="#product">tpqr.co/AB3xY9</a><br /><StatusDot tone="teal" />已发布</p>
+                  <p><strong>短链接（不变）</strong><br /><span className="workflow-step__example">tpqr.co/AB3xY9 <small>示例</small></span><br /><StatusDot tone="teal" />已发布</p>
                 </div>
               ) : (
                 <ArchiveCard title={index === 1 ? "草稿内容（未发布）" : index === 2 ? "预览（仍为已发布版本）" : "已发布（新版本生效）"} accent={tone}>
@@ -41,7 +41,7 @@ export function WorkflowSection() {
           </article>
         ))}
       </div>
-      <a className="section-link" href="#styles">查看发布流程 <ArrowDownRight /></a>
+      <a className="section-link" href="#workflow">查看发布流程 <ArrowDownRight /></a>
       <span className="workflow-section__number" aria-hidden="true">02</span>
     </section>
   );

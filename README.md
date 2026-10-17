@@ -24,8 +24,10 @@ data, personal QR codes, and generated reports are never committed.
   linking. Google OAuth backend support is retained for later re-enabling, but
   its current UI entry is intentionally hidden.
 - Draft editing, preview, revision checks, immutable publishing, and QR style
-  controls. Publishing and code deletion use in-app confirmation dialogs.
-- Browser-generated PNG, SVG, WEBP, and JPG QR downloads.
+  controls. Unsaved style changes warn before leaving; publishing and code
+  deletion use in-app confirmation dialogs.
+- Browser-generated PNG, SVG, WEBP, and JPG QR downloads, including optional
+  frame text in the exported image.
 - Private OSS media storage with MIME, file-signature, size, ownership, and
   download-name checks. A local filesystem adapter is used for development and
   tests.

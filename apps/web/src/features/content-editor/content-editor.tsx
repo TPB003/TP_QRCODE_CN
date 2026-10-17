@@ -1,17 +1,27 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ActiveContent } from "@tpqr/domain";
+import { ConfirmDialog } from "@client/components/ui/confirm-dialog";
 import { CONTENT_LABELS, CONTENT_TYPES, emptyContent } from "./content-editor-model";
 import "./content-editor.css";
 
 type Props = { value: ActiveContent; onChange: (next: ActiveContent) => void; onUpload: (file: File, purpose?: string) => Promise<string>; uploading?: boolean; fieldErrors?: Record<string, string[]> };
 
 export function ContentEditor({ value, onChange, onUpload, uploading = false, fieldErrors = {} }: Props) {
+  const [pendingType, setPendingType] = useState<ActiveContent["type"] | null>(null);
   const title = useMemo(() => CONTENT_LABELS[value.type], [value.type]);
   const set = (key: string, next: unknown) => onChange({ ...value, [key]: next });
   const errorFor = (key: string) => fieldErrors[`content.${key}`]?.[0] ?? fieldErrors[key]?.[0];
+  const requestTypeChange = (type: ActiveContent["type"]) => {
+    if (type === value.type) return;
+    if (Object.entries(emptyContent(value.type)).some(([key, initial]) => {
+      const current = (value as unknown as Record<string, unknown>)[key];
+      return typeof current === "string" ? current.trim() !== String(initial ?? "").trim() : current !== initial;
+    })) setPendingType(type);
+    else onChange(emptyContent(type));
+  };
   const fieldError = (key: string) => { const message = errorFor(key); return message ? <small className="tp-field-error" role="alert">{message}</small> : null; };
   const upload = async (file: File | undefined, purpose = value.type) => { if (!file) return; const id = await onUpload(file, purpose); set("assetId", id); };
-  return <details className="tp-content-editor" aria-label="活码内容编辑器" open>
+  return <><details className="tp-content-editor" aria-label="活码内容编辑器" open>
     <summary className="tp-content-editor__header">
       <div>
         <span className="tp-content-editor__eyebrow">CONTENT PAYLOAD</span>
@@ -20,7 +30,7 @@ export function ContentEditor({ value, onChange, onUpload, uploading = false, fi
       <small className="tp-content-editor__hint">二维码只保存一个内容版本，发布后扫码页面只展示这里的内容。</small>
     </summary>
     <div className="tp-content-types" role="tablist" aria-label="内容类型">
-      {CONTENT_TYPES.map((type) => <button key={type} type="button" role="tab" aria-selected={type === value.type} className={type === value.type ? "is-active" : ""} onClick={() => onChange(emptyContent(type))}>{CONTENT_LABELS[type]}</button>)}
+      {CONTENT_TYPES.map((type) => <button key={type} type="button" role="tab" aria-selected={type === value.type} className={type === value.type ? "is-active" : ""} onClick={() => requestTypeChange(type)}>{CONTENT_LABELS[type]}</button>)}
     </div>
     <div className={`tp-content-fields tp-content-fields--${value.type}`}>
       {(value.type === "image" || value.type === "video" || value.type === "audio" || value.type === "file") && <label className={`tp-upload-field${value.assetId.startsWith("00000000") ? " is-empty" : " is-ready"}`}><span>{value.type === "file" ? "选择文件" : `上传${title}`}</span><input type="file" accept={value.type === "image" ? "image/*" : value.type === "video" ? "video/*" : value.type === "audio" ? "audio/*" : undefined} disabled={uploading} onChange={(e) => void upload(e.target.files?.[0])} />{uploading ? <small role="status">上传中…</small> : value.assetId.startsWith("00000000") ? <small>点击此区域选择文件，发布前必须完成上传</small> : <small role="status">已上传资源：{value.assetId.slice(0, 8)}</small>}{fieldError("assetId")}</label>}
@@ -32,5 +42,12 @@ export function ContentEditor({ value, onChange, onUpload, uploading = false, fi
       {value.type === "text" && <div className="tp-field-group"><label><span>标题（可选）</span><input value={value.title} onChange={(e) => set("title", e.target.value)} />{fieldError("title")}</label><label><span>正文</span><textarea maxLength={4000} value={value.text} onChange={(e) => set("text", e.target.value)} />{fieldError("text")}</label><small className="tp-character-count">{value.text.length}/4000</small></div>}
       {value.type === "contact" && <div className="tp-contact-grid">{([["firstName", "名"], ["lastName", "姓"], ["organization", "组织"], ["title", "职位"], ["phone", "电话"], ["email", "邮箱"], ["website", "网站"], ["address", "地址"]] as const).map(([key, label]) => <label key={key}><span>{label}</span><input type={key === "email" ? "email" : key === "website" ? "url" : "text"} value={value[key]} onChange={(e) => set(key, e.target.value)} />{fieldError(key)}</label>)}<label><span>备注（可选）</span><textarea value={value.note} onChange={(e) => set("note", e.target.value)} />{fieldError("note")}</label></div>}
     </div>
-  </details>;
+  </details><ConfirmDialog
+    open={pendingType !== null}
+    onOpenChange={(open) => { if (!open) setPendingType(null); }}
+    title="确认切换内容类型？"
+    description="切换类型将清空当前已输入的内容，继续吗？"
+    confirmLabel="确认切换"
+    onConfirm={() => { if (pendingType) onChange(emptyContent(pendingType)); setPendingType(null); }}
+  /></>;
 }

@@ -39,6 +39,7 @@ async function waitForQrUpdate(page: Page, action: () => Promise<void>) {
   const previous = await image.getAttribute("src");
   await action();
   await expect.poll(() => image.getAttribute("src")).not.toBe(previous);
+  await expect.poll(() => image.evaluate((element) => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true);
 }
 
 test("QR 预览样式矩阵可以生成并解码，解码器支持图片回退", async ({ page }, testInfo) => {
@@ -134,4 +135,71 @@ test("QR 预览样式矩阵可以生成并解码，解码器支持图片回退",
   await page.locator('input[type="file"]').setInputFiles({ name: "generated-qr.png", mimeType: "image/png", buffer: Buffer.from(pngBase64, "base64") });
   await expect(page).toHaveURL(new RegExp(`/s/${code.slug}$`), { timeout: 20000 });
   await expect(page.getByRole("alert")).toBeVisible({ timeout: 20000 });
+});
+
+test("四种二维码导出格式都包含边框说明且可扫", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile", "四种文件格式的二维码导出在桌面 Chromium 项目验证一次即可");
+  await page.addInitScript(() => {
+    const createObjectURL = URL.createObjectURL.bind(URL);
+    (window as unknown as { __qrDownloadBlob: Blob | null }).__qrDownloadBlob = null;
+    URL.createObjectURL = (object) => {
+      if (object instanceof Blob && object.type.startsWith("image/")) (window as unknown as { __qrDownloadBlob: Blob | null }).__qrDownloadBlob = object;
+      return createObjectURL(object);
+    };
+  });
+  await authenticate(page, `qr-frame-${Date.now()}-${testInfo.workerIndex}@active.tpqr.test`);
+  await page.goto("/");
+  const created = await page.request.post("/api/codes", { data: { title: "二维码边框导出", content: { type: "text", title: "二维码边框导出", text: "边框文字应随二维码一起导出" } } });
+  expect(created.status()).toBe(201);
+  const code = (await json<{ id: string; slug: string }>(created)).data;
+  if (!code) throw new Error("创建边框导出测试活码失败");
+  const payload = `${new URL(page.url()).origin}/s/${code.slug}`;
+
+  await page.goto(`/app/codes/${code.id}/qr`);
+  await page.addScriptTag({ path: jsQrScript });
+  await expect(page.getByAltText("活码二维码预览")).toBeVisible({ timeout: 20000 });
+  await page.getByLabel("显示边框说明").check();
+  await page.getByLabel("边框说明文字").fill("扫码查看详情");
+  await expect(page.locator(".tp-qr-frame-preview")).toHaveText("扫码查看详情");
+
+  for (const [format, mime] of [["png", "image/png"], ["svg", "image/svg+xml"], ["webp", "image/webp"], ["jpg", "image/jpeg"]] as const) {
+    await page.getByLabel("下载格式").selectOption(format);
+    await page.evaluate(() => { (window as unknown as { __qrDownloadBlob: Blob | null }).__qrDownloadBlob = null; });
+    const downloadEvent = page.waitForEvent("download");
+    await page.getByRole("button", { name: "下载", exact: true }).click();
+    const download = await downloadEvent;
+    expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${format}$`, "i"));
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __qrDownloadBlob: Blob | null }).__qrDownloadBlob?.type)).toBe(mime);
+    const exported = await page.evaluate(async () => {
+      const blob = (window as unknown as { __qrDownloadBlob: Blob | null; jsQR?: (data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts: "attemptBoth" }) => { data: string } | null }).__qrDownloadBlob;
+      if (!blob) throw new Error("二维码导出没有 Blob");
+      if (blob.type === "image/svg+xml") {
+        const svg = new DOMParser().parseFromString(await blob.text(), "image/svg+xml").documentElement;
+        return { size: blob.size, width: Number.parseFloat(svg.getAttribute("width") ?? "0"), height: Number.parseFloat(svg.getAttribute("height") ?? "0"), frameText: svg.querySelector("text")?.textContent ?? "", decoded: "" };
+      }
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("无法读取导出二维码");
+      context.drawImage(bitmap, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      const qrPixels = context.getImageData(0, 0, canvas.width, canvas.width);
+      const decode = (window as unknown as { jsQR?: (data: Uint8ClampedArray, width: number, height: number, options?: { inversionAttempts: "attemptBoth" }) => { data: string } | null }).jsQR;
+      let darkFooterPixels = 0;
+      for (let y = Math.max(0, canvas.height - 52); y < canvas.height - 4; y += 1) for (let x = 0; x < canvas.width; x += 1) {
+        const offset = (y * canvas.width + x) * 4;
+        if (pixels.data[offset] < 140 && pixels.data[offset + 1] < 140 && pixels.data[offset + 2] < 140) darkFooterPixels += 1;
+      }
+      bitmap.close();
+      return { size: blob.size, width: canvas.width, height: canvas.height, frameText: "", decoded: decode?.(qrPixels.data, qrPixels.width, qrPixels.height, { inversionAttempts: "attemptBoth" })?.data ?? "", darkFooterPixels };
+    });
+    expect(exported.size).toBeGreaterThan(100);
+    expect(exported.height).toBeGreaterThan(exported.width);
+    if (format === "svg") expect(exported.frameText).toBe("扫码查看详情");
+    else {
+      expect(exported.decoded).toBe(payload);
+      expect(exported.darkFooterPixels).toBeGreaterThan(0);
+    }
+  }
 });

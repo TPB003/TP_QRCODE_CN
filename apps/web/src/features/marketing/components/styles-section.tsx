@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowRight, Check, Image, Link2, Type } from "lucide-react";
 import { QrSpecimen } from "@client/components/ui/qr-specimen";
 import { marketingQrStyles } from "../model/marketing-data";
 import { CalibrationMark } from "./visual-primitives";
 
 const contentTypes = [
-  { id: "text", label: "文本", icon: Type },
+  { id: "text", label: "文字", icon: Type },
   { id: "url", label: "网址", icon: Link2 },
   { id: "image", label: "图片", icon: Image },
 ] as const;
@@ -69,7 +70,7 @@ export function StylesSection() {
           <div><span>背景色</span><strong><i className="swatch swatch--paper" />#F2EFE8</strong></div>
           <div><span>中心 Logo</span><strong><i className="mini-logo">TP</i>开启</strong></div>
           <p><Check size={20} />所有样式都必须通过真实扫码验证</p>
-          <a className="style-controls__action" href="#templates">打开样式编辑器 <ArrowRight /></a>
+          <Link className="style-controls__action" to="/login">进入样式编辑器 <ArrowRight /></Link>
         </div>
       </div>
     </section>

@@ -109,6 +109,24 @@ test.describe("second-pass product regressions", () => {
     }
   });
 
+  test("marketing links point to the right sections and explain login-only actions", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText("需登录后使用", { exact: true })).toHaveCount(3);
+    await expect(page.getByRole("link", { name: /开始创建活码/ })).toHaveAttribute("href", "/login");
+    await expect(page.getByRole("link", { name: /免费创建活码/ })).toHaveAttribute("href", "/login");
+    await expect(page.getByRole("link", { name: /免费创建动态二维码/ })).toHaveAttribute("href", "/login");
+
+    const example = page.locator(".workflow-step__example");
+    await expect(example).toContainText("tpqr.co/AB3xY9");
+    await expect(example).toContainText("示例");
+    await expect(page.getByRole("link", { name: /tpqr\.co\/AB3xY9/ })).toHaveCount(0);
+    await page.getByRole("link", { name: "查看发布流程" }).click();
+    await expect(page).toHaveURL(/#workflow$/);
+
+    await page.getByRole("link", { name: "进入样式编辑器" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test("public scan does not show a branded loading card while content is pending", async ({ page }) => {
     let releaseResponse!: () => void;
     const responsePending = new Promise<void>((resolve) => { releaseResponse = resolve; });
