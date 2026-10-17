@@ -10,6 +10,15 @@ type Detector = { detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: 
 type DetectorCtor = new (options?: { formats?: string[] }) => Detector;
 function detector() { const ctor = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector; return ctor ? new ctor({ formats: ["qr_code"] }) : null; }
 
+function decodeInWorker(bitmap: ImageBitmap): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./decoder.worker.ts", import.meta.url), { type: "module" });
+    worker.addEventListener("message", (event: MessageEvent<{ value: string | null }>) => { worker.terminate(); resolve(event.data.value); }, { once: true });
+    worker.addEventListener("error", () => { worker.terminate(); reject(new Error("二维码图片解码失败")); }, { once: true });
+    try { worker.postMessage({ bitmap }, [bitmap]); } catch (error) { worker.terminate(); reject(error instanceof Error ? error : new Error("二维码图片解码失败")); }
+  });
+}
+
 function decodeWithCanvas(source: ImageBitmapSource): string | null {
   const { width, height } = source instanceof HTMLVideoElement
     ? { width: source.videoWidth, height: source.videoHeight }
@@ -53,6 +62,26 @@ export function DecoderView() {
       setNotice("图片无法识别，请重新拍摄清晰二维码");
     }
   }
+  async function decodeUpload(bitmap: ImageBitmap) {
+    const reader = detector();
+    if (reader) {
+      try {
+        const value = (await reader.detect(bitmap))[0]?.rawValue;
+        if (value) { bitmap.close(); handleDecoded(value); return; }
+      } catch {
+        // Continue with the bundled worker when native detection fails.
+      }
+    }
+    if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") { await decodeSource(bitmap); bitmap.close(); return; }
+    try {
+      const value = await decodeInWorker(bitmap);
+      if (value) handleDecoded(value);
+      else setNotice("没有发现二维码");
+    } catch {
+      if (bitmap.width && bitmap.height) { await decodeSource(bitmap); bitmap.close(); }
+      else setNotice("图片无法识别，请重新拍摄清晰二维码");
+    }
+  }
   async function decodeImageElement(file: File) {
     const url = URL.createObjectURL(file);
     try {
@@ -67,7 +96,7 @@ export function DecoderView() {
     if (!file) return;
     try {
       const bitmap = await createImageBitmap(file);
-      try { await decodeSource(bitmap); } finally { bitmap.close(); }
+      await decodeUpload(bitmap);
     } catch {
       try { await decodeImageElement(file); } catch { setNotice("图片读取失败"); }
     }
