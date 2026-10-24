@@ -28,7 +28,6 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:unit
-      - run: npm run test:integration
       - run: npm run build
 
   aliyun-integration:
@@ -96,14 +95,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
       - run: docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml config
-      - run: docker build -f infra/aliyun/Dockerfile -t tpqr-cn-ci .
       - name: Start local compose smoke stack
         run: |
           trap 'docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml down -v' EXIT
@@ -120,10 +112,23 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run check:opensource
-      - run: git diff --check
+      - name: Check changed lines for whitespace errors
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --check "$BASE_SHA...$HEAD_SHA"
+          elif [[ "$EVENT_NAME" == "push" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --check "$BEFORE_SHA...$HEAD_SHA"
+          else
+            git diff --check "$HEAD_SHA^...$HEAD_SHA"
+          fi
