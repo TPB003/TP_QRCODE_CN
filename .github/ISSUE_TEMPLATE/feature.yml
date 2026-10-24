@@ -3,8 +3,35 @@ description: Suggest a focused improvement
 title: "[feature] "
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: "For larger behavior changes, open an Issue before implementation. Do not include secrets, personal QR payloads, or production data."
   - type: textarea
     id: problem
     attributes:
-      label: Problem and proposed solution
+      label: User problem and use case
+      description: Who needs this, and what are they trying to accomplish?
+    validations:
       required: true
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired behavior
+      description: Describe the outcome from the user's perspective.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that would make this request complete.
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional approaches or constraints.
+    validations:
+      required: false
