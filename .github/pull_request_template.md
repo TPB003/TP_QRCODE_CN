@@ -1,19 +1,31 @@
+## Linked issue
+
+Closes #
+
 ## What changed
 
-<!-- Describe the user-visible behavior and the implementation boundary. -->
+<!-- Summarize the user-visible behavior and keep this PR to one logical change. -->
 
-## Verification
+## Review notes
 
-- [ ] `npm run check:all`
-- [ ] `npm run check:opensource`
-- [ ] `git diff --check`
-- [ ] README is updated, or this change is documented as README-neutral.
-- [ ] Visual changes refresh `assets/open/homepage.png`.
-- [ ] New commands, environment variables, auth, or deployment changes are documented.
-- [ ] Automatic merge is appropriate, or the `no-auto-merge` label is applied.
+- User impact:
+- Screenshots or recordings for visual changes:
+- API, database, compatibility, or deployment impact:
+- Known limits:
 
-## Security and configuration
+## Validation
 
-- [ ] No secrets, personal QR payloads, ECS/OSS identifiers, or private media are included.
-- [ ] New environment variables are documented in an example file.
-- [ ] Migration and rollback impact is documented.
+- [ ] Required GitHub Actions checks passed.
+- [ ] Commands and results below list only checks actually run.
+
+Commands/results:
+
+## Documentation and security
+
+- [ ] README Features/Workflow reflects behavior changes, or this is README-neutral.
+- [ ] Homepage screenshot is current for visual/navigation changes.
+- [ ] CLI, deployment, environment, auth, or storage docs match this change.
+- [ ] No secrets, personal QR payloads, production identifiers, or real submissions are included.
+- [ ] Migration and rollback impact is documented when applicable.
+
+Automatic merge is opt-in. Add the `auto-merge` label only when you explicitly want this PR merged after its current head SHA passes CI and all merge requirements are met.
