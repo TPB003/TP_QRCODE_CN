@@ -97,79 +97,37 @@ jobs:
                 continue;
               }
 
-              if (details.data.mergeable_state === 'clean') {
-                const merged = await github.rest.pulls.merge({
-                  owner,
-                  repo,
-                  pull_number: pull.number,
-                  sha: headSha,
-                  merge_method: 'squash',
-                });
-                if (!merged.data.merged) {
-                  core.setFailed(
-                    'Unable to merge PR #' + pull.number + ': ' +
-                    (merged.data.message || 'merge was not completed'),
-                  );
-                } else {
-                  core.info('Merged PR #' + pull.number + ' after successful CI');
-                  await github.rest.actions.createWorkflowDispatch({
-                    owner,
-                    repo,
-                    workflow_id: 'ci.yml',
-                    ref: 'main',
-                  });
-                  core.info('Dispatched main CI after a token-authenticated merge');
-                }
+              if (details.data.mergeable_state !== 'clean') {
+                core.info(
+                  'Skipping PR #' + pull.number +
+                  ': required merge conditions are not currently satisfied',
+                );
                 continue;
               }
 
-              try {
-                await github.graphql(
-                  'mutation EnableAutoMerge($pullRequestId: ID!) {' +
-                  ' enablePullRequestAutoMerge(input: {' +
-                  ' pullRequestId: $pullRequestId, mergeMethod: SQUASH' +
-                  ' }) { pullRequest { number } } }',
-                  { pullRequestId: pull.node_id },
+              const merged = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: pull.number,
+                sha: headSha,
+                merge_method: 'squash',
+              });
+              if (!merged.data.merged) {
+                core.setFailed(
+                  'Unable to merge PR #' + pull.number + ': ' +
+                  (merged.data.message || 'merge was not completed'),
                 );
-                core.info('Queued auto-merge for PR #' + pull.number);
-              } catch (error) {
-                const refreshed = await github.rest.pulls.get({
-                  owner,
-                  repo,
-                  pull_number: pull.number,
-                });
-                if (
-                  refreshed.data.head.sha === headSha &&
-                  refreshed.data.mergeable_state === 'clean'
-                ) {
-                  const merged = await github.rest.pulls.merge({
-                    owner,
-                    repo,
-                    pull_number: pull.number,
-                    sha: headSha,
-                    merge_method: 'squash',
-                  });
-                  if (!merged.data.merged) {
-                    core.setFailed(
-                      'Unable to merge PR #' + pull.number + ': ' +
-                      (merged.data.message || error.message),
-                    );
-                  } else {
-                    core.info('Merged PR #' + pull.number + ' after auto-merge became ready');
-                    await github.rest.actions.createWorkflowDispatch({
-                      owner,
-                      repo,
-                      workflow_id: 'ci.yml',
-                      ref: 'main',
-                    });
-                    core.info('Dispatched main CI after a token-authenticated merge');
-                  }
-                } else {
-                  core.setFailed(
-                    'Unable to enable auto-merge for PR #' + pull.number + ': ' + error.message,
-                  );
-                }
+                continue;
               }
+
+              core.info('Merged PR #' + pull.number + ' after successful CI');
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'ci.yml',
+                ref: 'main',
+              });
+              core.info('Dispatched main CI after a token-authenticated merge');
             }
 
   disable-opt-out:
