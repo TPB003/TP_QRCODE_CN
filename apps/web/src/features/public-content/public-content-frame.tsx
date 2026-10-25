@@ -5,7 +5,7 @@ import { toVCard, validateSafeUrl } from "@tpqr/content";
 import "./public-content-overrides.css";
 
 type PublicEvent = "view" | "click" | "download" | "play";
-type Props = { data: PublicContentResponse; onEvent?: (event: PublicEvent) => void; autoRedirectUrl?: boolean };
+type Props = { data: PublicContentResponse; onEvent?: (event: PublicEvent) => void; autoRedirectUrl?: boolean; urlRedirectPreview?: boolean };
 
 function assetUrl(data: PublicContentResponse, id: string) {
   return data.assets.find((asset) => asset.id === id)?.url ?? `/api/public/${encodeURIComponent(data.code.slug)}/assets/${encodeURIComponent(id)}`;
@@ -72,11 +72,13 @@ function contentTitle(content: ActiveContent): string {
   return "";
 }
 
-export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false }: Props) {
+export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false, urlRedirectPreview = false }: Props) {
   const { code } = data;
   const content = code.content;
   const copy = useCopy();
-  const [error, setError] = useState("");
+  const [mediaError, setMediaError] = useState<{ content: ActiveContent; message: string } | null>(null);
+  const error = mediaError?.content === content ? mediaError.message : "";
+  const setError = (message: string) => setMediaError({ content, message });
   const imageOnly = content.type === "image";
   const title = imageOnly ? "" : contentTitle(content) || code.title;
   const pageClass = `public-content-page public-content-page--${content.type}`;
@@ -136,6 +138,10 @@ export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false }: P
     }
     if (content.type === "url") {
       const safe = validateSafeUrl(content.url);
+      if (urlRedirectPreview) return <div className="public-url public-url--redirect-preview">
+        {content.description ? <p>{content.description}</p> : null}
+        {safe.ok && safe.url ? <div className="public-url__redirect-target"><span>扫码后将自动跳转到</span><strong>{safe.url.hostname}</strong><code>{safe.url.toString()}</code></div> : <p className="public-error">该网址不安全或格式无效，扫码后不会跳转。</p>}
+      </div>;
       return <div className="public-url">{content.description ? <p>{content.description}</p> : null}<p className="public-url__host">{safe.ok ? new URL(content.url).hostname : "无效网址"}</p>{safe.ok ? <a className="button button--primary" href={safe.url?.toString()} target="_blank" rel="noopener noreferrer" onClick={() => onEvent?.("click")}><ExternalLink />安全打开</a> : <p className="public-error">该网址不安全或格式无效，已阻止跳转。</p>}</div>;
     }
     if (content.type === "contact") return <div className="public-contact">
