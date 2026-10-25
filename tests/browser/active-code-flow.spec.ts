@@ -31,7 +31,7 @@ test.describe("active QR public flow", () => {
     await expect(page.getByText("七类活码公共内容")).toBeVisible({ timeout: 20_000 });
   });
 
-  test("renders a published URL with safe-opening affordance on mobile", async ({ page }, testInfo) => {
+  test("redirects a published URL directly and records its view and click events", async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const email = `browser-url-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`;
     await authenticate(page, email);
@@ -39,12 +39,36 @@ test.describe("active QR public flow", () => {
     expect(createdResponse.status()).toBe(201);
     const code = (await apiJson<{ id: string; slug: string; revision: number }>(createdResponse)).data as { id: string; slug: string; revision: number };
     expect((await page.request.post(`/api/codes/${code.id}/publish`, { data: { revision: code.revision } })).status()).toBe(200);
+    const events: string[] = [];
+    await page.route(`**/api/public/${code.slug}/events`, async (route) => {
+      const body = route.request().postDataJSON() as { event: string };
+      events.push(body.event);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { accepted: true, duplicate: false } }) });
+    });
+    await page.route("https://example.com/docs", (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: "<html><head><meta charset=\"utf-8\"></head><body><h1>目标网页已打开</h1></body></html>" }));
     await page.goto(`/s/${code.slug}`);
-    await expect(page.getByRole("heading", { name: "安全网址" })).toBeVisible();
-    const link = page.getByRole("link", { name: "安全打开" });
-    await expect(link).toHaveAttribute("href", "https://example.com/docs");
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-    expect(overflow).toBe(false);
+    await expect(page).toHaveURL("https://example.com/docs");
+    await expect(page.getByRole("heading", { name: "目标网页已打开" })).toBeVisible();
+    await expect.poll(() => events).toEqual(expect.arrayContaining(["view", "click"]));
+  });
+
+  test("does not redirect unsafe URL content", async ({ page }, testInfo) => {
+    const email = `browser-unsafe-url-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`;
+    await authenticate(page, email);
+    const createdResponse = await page.request.post("/api/codes", { data: { title: "拦截不安全网址", content: { type: "url", title: "不安全网址", url: "https://example.com/docs", description: "安全检查" } } });
+    expect(createdResponse.status()).toBe(201);
+    const code = (await apiJson<{ id: string; slug: string; revision: number }>(createdResponse)).data as { id: string; slug: string; revision: number };
+    expect((await page.request.post(`/api/codes/${code.id}/publish`, { data: { revision: code.revision } })).status()).toBe(200);
+    await page.route(`**/api/public/${code.slug}`, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json() as { data: { code: { content: { url: string } } } };
+      body.data.code.content.url = "javascript:alert(1)";
+      await route.fulfill({ response, body: JSON.stringify(body) });
+    });
+
+    await page.goto(`/s/${code.slug}`);
+    await expect(page.getByText("该网址不安全或格式无效，已阻止跳转。")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/s/${code.slug}$`));
   });
 
   test("keeps inactive or unknown slugs out of the public page", async ({ page }, testInfo) => {

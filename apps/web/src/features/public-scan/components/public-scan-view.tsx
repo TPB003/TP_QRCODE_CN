@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { PublicContentResponse } from "@tpqr/domain";
 import { api } from "@client/lib/api";
@@ -20,7 +20,7 @@ async function loadPublicCode(slug: string, idempotencyKey: string): Promise<Pub
 
 export function PublicScanView() {
   const { slug = "" } = useParams(); const [data, setData] = useState<PublicContentResponse | null>(null); const [error, setError] = useState("");
-  const sendEvent = (event: "view" | "click" | "download" | "play") => { void api.publicEvent(slug, event).catch(() => undefined); };
+  const sendEvent = useCallback((event: "view" | "click" | "download" | "play") => { void api.publicEvent(slug, event).catch(() => undefined); }, [slug]);
   useEffect(() => {
     let active = true;
     const scanKey = crypto.randomUUID();
@@ -33,5 +33,5 @@ export function PublicScanView() {
     return () => { active = false; };
   }, [slug]);
   if (error) return <main className="public-content-page"><article className="public-content-card"><span className="index-label">TP QR / 404</span><h1>页面暂不可用</h1><p className="public-error" role="alert">{error}</p><a className="button button--secondary" href="/">返回首页</a></article></main>;
-  return data ? <PublicContentFrame data={data} onEvent={sendEvent} /> : <main className="public-content-page public-content-page--loading" aria-busy="true" aria-label="正在加载内容" />;
+  return data ? <PublicContentFrame data={data} onEvent={sendEvent} autoRedirectUrl /> : <main className="public-content-page public-content-page--loading" aria-busy="true" aria-label="正在加载内容" />;
 }

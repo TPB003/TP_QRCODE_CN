@@ -39,6 +39,8 @@ data, personal QR codes, and generated reports are never committed.
 - Public content pages that adapt naturally to each content type, plus a QR
   decoder for camera/image input, URLs, text, vCards, and TP QR slugs, with a
   bundled image-decoding fallback when native QR detection is unavailable.
+- Published URL codes redirect directly to validated HTTP(S) destinations;
+  other content types stay on their public content page.
 - Idempotent scan, view, click, download, and play events with rate limits.
 - Per-code and account-wide analytics with 7, 30, and 90 day ranges.
 
@@ -46,7 +48,8 @@ data, personal QR codes, and generated reports are never committed.
 
 ```text
 login → workbench (overview/codes/types/analytics) → create or edit a code
-      → preview → confirm publish → render/download QR → scan public page
+      → preview → confirm publish → render/download QR
+      → scan URL code and redirect / open other public content pages
       → download/share → republish
 ```
 
