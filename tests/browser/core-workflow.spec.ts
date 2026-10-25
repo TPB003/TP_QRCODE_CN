@@ -39,10 +39,26 @@ test.describe("TP QR 本地核心流程", () => {
     await page.context().clearCookies();
     await page.goto("/app");
     await expect(page).toHaveURL(/\/login\?next=/);
-    await authenticateThroughUi(page, `guard-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`);
+    const email = `guard-${Date.now()}-${testInfo.project.name}-${testInfo.workerIndex}@active.tpqr.test`;
+    await authenticateThroughUi(page, email);
     await page.goto("/login");
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByRole("heading", { name: /ACTIVE/ })).toBeVisible();
+
+    const created = await page.request.post("/api/codes", { data: { title: "登录后返回目标页", content: { type: "text", title: "登录后返回目标页", text: "验证深链回跳" } } });
+    expect(created.status()).toBe(201);
+    const code = (await json<{ id: string }>(created)).data;
+    if (!code) throw new Error("创建登录回跳测试活码失败");
+    await page.context().clearCookies();
+    await page.goto(`/app/codes/${code.id}/analytics`);
+    await expect(page).toHaveURL(/\/login\?next=/);
+    await page.getByLabel("邮箱地址").fill(email);
+    await page.getByRole("button", { name: "发送验证码" }).click();
+    await expect(page.getByText(/本地测试验证码/)).toBeVisible();
+    await page.getByLabel("验证码").fill("123456");
+    await page.getByRole("button", { name: "验证并登录" }).click();
+    await expect(page).toHaveURL(`/app/codes/${code.id}/analytics`);
+    await expect(page.getByRole("heading", { name: "登录后返回目标页" })).toBeVisible();
   });
 
   test("工作台创建文字活码、保存草稿、发布、下载真实二维码并打开公共页", async ({ page }, testInfo) => {

@@ -23,6 +23,9 @@ data, personal QR codes, and generated reports are never committed.
 - Email verification-code login and GitHub login with verified-email account
   linking. Google OAuth backend support is retained for later re-enabling, but
   its current UI entry is intentionally hidden.
+- An authenticated dashboard with separate overview, code list, content type,
+  and account analytics views. Code editor, versions, analytics, and settings
+  share direct navigation, and the decoder links back to the workbench or home.
 - Draft editing, preview, revision checks, immutable publishing, and QR style
   controls. Unsaved style changes warn before leaving; publishing and code
   deletion use in-app confirmation dialogs.
@@ -40,8 +43,21 @@ data, personal QR codes, and generated reports are never committed.
 ## User workflow
 
 ```text
-login → create code → choose type → edit draft → preview → confirm publish
-      → render/download QR → scan public page → download/share → republish
+login → workbench (overview/codes/types/analytics) → create or edit a code
+      → preview → confirm publish → render/download QR → scan public page
+      → download/share → republish
+```
+
+## Workbench navigation
+
+The workbench keeps the selected dashboard view visible in its navigation.
+Each code links to its editor, versions, scan analytics, and settings, while the
+decoder provides links back to the workbench and home.
+
+[![TP QR workbench navigation](assets/open/workbench-navigation.png)](assets/open/workbench-navigation.png)
+
+```text
+editor ↔ versions / scan analytics / settings → decoder → workbench
 ```
 
 ## Architecture

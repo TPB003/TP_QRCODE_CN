@@ -68,7 +68,7 @@ export function ProjectShell({ children }: PropsWithChildren) {
       <aside className={`project-sidebar ${menuOpen ? "is-open" : ""}`}>
         <nav aria-label="项目导航">
           {projectNavigation.map(({ to, label, icon: Icon }) => (
-            <NavLink key={label} to={to} onClick={() => setMenuOpen(false)}><Icon /><span>{label}</span></NavLink>
+            <NavLink key={label} to={to} end={label === "返回工作台"} onClick={() => setMenuOpen(false)}><Icon /><span>{label}</span></NavLink>
           ))}
         </nav>
         <div className="shell-account-card" aria-label="个人账号">
