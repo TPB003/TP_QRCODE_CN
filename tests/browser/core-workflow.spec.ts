@@ -5,6 +5,12 @@ import { expect, test, type Page } from "@playwright/test";
 type Envelope<T> = { data?: T; error?: { code?: string; message?: string } };
 type Code = { id: string; slug: string; revision: number; content: { type: string }; publishedVersionId?: string | null };
 
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name === "chromium") {
+    await page.addInitScript(() => Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, get: () => 0 }));
+  }
+});
+
 async function json<T>(response: { json(): Promise<unknown> }): Promise<Envelope<T>> {
   const value: unknown = await response.json();
   return value as Envelope<T>;
