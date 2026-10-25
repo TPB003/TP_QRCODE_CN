@@ -244,4 +244,3 @@ test.describe("QR editor workbench layout", () => {
     await expect(error).toContainText("活码不存在");
   });
 });
-

@@ -162,4 +162,3 @@ export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false, url
     </article>
   </main>;
 }
-
