@@ -19,3 +19,17 @@ export interface QrCode {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface AccountAnalyticsMetrics {
+  scans: number;
+  views: number;
+  clicks: number;
+  downloads: number;
+  plays: number;
+}
+
+export interface AccountAnalyticsSummary {
+  days: 7 | 30 | 90;
+  trend: Array<{ date: string } & AccountAnalyticsMetrics>;
+  byCode: Array<{ codeId: string } & AccountAnalyticsMetrics>;
+}
