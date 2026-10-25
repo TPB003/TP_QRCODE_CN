@@ -1,54 +1,145 @@
 name: Release to Aliyun
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
-      environment:
-        description: GitHub Environment to deploy
+      confirm_production:
+        description: Confirm that this is an intentional production release from main
         required: true
-        default: staging
         type: choice
-        options: [staging, production]
+        options: [no, yes]
+        default: no
 
 permissions:
   contents: read
 
+concurrency:
+  group: aliyun-production-release
+  cancel-in-progress: false
+
 jobs:
   preflight:
     name: release-preflight
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.name == 'CI' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.conclusion == 'success')
+      }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      commit_sha: ${{ steps.source.outputs.commit_sha }}
     steps:
+      - name: Verify the release source
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
+          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
+          TRIGGER_EVENT: ${{ github.event.workflow_run.event }}
+          TRIGGER_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$REF" == "refs/heads/main" ]]
+            [[ "$CONFIRM_PRODUCTION" == "yes" ]]
+            release_sha="$DISPATCH_SHA"
+          else
+            [[ "$TRIGGER_WORKFLOW" == "CI" ]]
+            [[ "$TRIGGER_EVENT" == "push" ]]
+            [[ "$TRIGGER_BRANCH" == "main" ]]
+            [[ "$TRIGGER_CONCLUSION" == "success" ]]
+            release_sha="$TRIGGER_SHA"
+          fi
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "commit_sha=$release_sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+        with:
+          ref: ${{ steps.source.outputs.commit_sha }}
+      - name: Run full checks for a manual release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-      - run: npm run check:all
-      - run: docker build -f infra/aliyun/Dockerfile -t tpqr-cn:${{ github.sha }} .
+      - name: Verify a manual release locally
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run check:all
+      - name: Build immutable application images
+        env:
+          RELEASE_SHA: ${{ steps.source.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          docker build -f infra/aliyun/Dockerfile --target api \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
+            -t "tpqr-cn-api:$RELEASE_SHA" .
+          docker build -f infra/aliyun/Dockerfile --target gateway \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
+            -t "tpqr-cn-gateway:$RELEASE_SHA" .
+          mkdir -p "$RUNNER_TEMP/tpqr-release"
+          docker save "tpqr-cn-api:$RELEASE_SHA" "tpqr-cn-gateway:$RELEASE_SHA" \
+            | gzip -1 > "$RUNNER_TEMP/tpqr-release/images.tar.gz"
+          cp infra/aliyun/docker-compose.release.yml "$RUNNER_TEMP/tpqr-release/"
+          tar -cf "$RUNNER_TEMP/tpqr-release.tar" \
+            -C "$RUNNER_TEMP/tpqr-release" images.tar.gz docker-compose.release.yml
+      - uses: actions/upload-artifact@v6
+        with:
+          name: tpqr-release-${{ steps.source.outputs.commit_sha }}
+          path: ${{ runner.temp }}/tpqr-release.tar
+          if-no-files-found: error
+          retention-days: 2
 
   deploy:
-    name: deploy-to-ecs
+    name: deploy-production
     needs: preflight
-    if: ${{ vars.ALIYUN_DEPLOY_ENABLED == 'true' }}
+    if: ${{ needs.preflight.result == 'success' && (github.event_name == 'workflow_dispatch' || vars.ALIYUN_DEPLOY_ENABLED == 'true') }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.ALIYUN_PUBLIC_BASE_URL }}
+    permissions:
+      actions: read
+      contents: read
     steps:
-      - name: Deploy using the protected environment command
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.preflight.outputs.commit_sha }}
+      - uses: actions/download-artifact@v6
+        with:
+          name: tpqr-release-${{ needs.preflight.outputs.commit_sha }}
+          path: ${{ runner.temp }}/tpqr-release
+      - name: Deploy through the restricted server command
         env:
-          DEPLOY_COMMAND: ${{ secrets.ALIYUN_DEPLOY_COMMAND }}
-        run: |
-          test -n "$DEPLOY_COMMAND"
-          echo "Running the protected Aliyun deployment command"
-          bash -c "$DEPLOY_COMMAND"
+          ALIYUN_DEPLOY_HOST: ${{ vars.ALIYUN_DEPLOY_HOST }}
+          ALIYUN_DEPLOY_USER: ${{ vars.ALIYUN_DEPLOY_USER }}
+          ALIYUN_DEPLOY_PORT: ${{ vars.ALIYUN_DEPLOY_PORT }}
+          ALIYUN_DEPLOY_KEY: ${{ secrets.ALIYUN_DEPLOY_KEY }}
+          ALIYUN_DEPLOY_KNOWN_HOSTS: ${{ secrets.ALIYUN_DEPLOY_KNOWN_HOSTS }}
+          ALIYUN_PUBLIC_SMOKE_SLUG: ${{ vars.ALIYUN_PUBLIC_SMOKE_SLUG }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.commit_sha }}
+        run: bash scripts/deploy-aliyun.sh "$RUNNER_TEMP/tpqr-release/tpqr-release.tar" "$RELEASE_SHA" "$ALIYUN_PUBLIC_SMOKE_SLUG"
 
-  not-configured:
-    name: deployment-not-configured
+  deployment-disabled:
+    name: production-deployment-disabled
     needs: preflight
-    if: ${{ vars.ALIYUN_DEPLOY_ENABLED != 'true' }}
+    if: ${{ needs.preflight.result == 'success' && github.event_name != 'workflow_dispatch' && vars.ALIYUN_DEPLOY_ENABLED != 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Preflight passed. Configure the protected Aliyun environment before enabling deployment."
+      - run: echo "Release preflight passed; production deployment remains disabled until the server baseline and production environment are verified."

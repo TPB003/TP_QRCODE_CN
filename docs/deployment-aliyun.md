@@ -73,3 +73,104 @@ Stop the API before copying `/opt/tpqr/data/tpqr.sqlite` to a dated file in
 previous application image/release until the new version passes `/api/health`
 and the browser smoke test. Restoring the previous image does not delete the
 database or OSS objects.
+
+## GitHub production releases
+
+`.github/workflows/release-aliyun.yml` prepares a release after the `CI`
+workflow succeeds for a push to `main`. It also has a manual dispatch entry;
+manual releases must run from `main` and explicitly select `yes`. Both paths
+build immutable API and gateway images from the same commit. The deployment job
+is serialized and targets the protected GitHub `production` environment.
+
+Production deployment stays disabled until the one-time server baseline,
+restricted account, public smoke QR, and GitHub environment settings have all
+been checked. Set repository variable `ALIYUN_DEPLOY_ENABLED` to `true` only
+after those steps. If it is unset or false, the workflow builds the release
+artifact and reports that production deployment is disabled.
+
+### Restricted deployment account
+
+Create a dedicated Ed25519 key pair on a trusted workstation. Keep the private
+key out of the repository and out of the root account's key file:
+
+```bash
+ssh-keygen -t ed25519 -a 64 -N '' -f tpqr-aliyun-deploy
+```
+
+Verify the ECS SSH host fingerprint through the Alibaba Cloud console before
+adding it to `known_hosts`. The public key is installed with the one-time root
+bootstrap. Copy these four files to a temporary directory on the server:
+
+```text
+infra/aliyun/install-deploy-user.sh
+infra/aliyun/tpqr-deploy-ssh
+infra/aliyun/tpqr-deploy-root
+tpqr-aliyun-deploy.pub
+```
+
+Run `install-deploy-user.sh tpqr-aliyun-deploy.pub` as root from that temporary
+directory. The installer creates `tpqr-deploy`, locks its password, keeps it
+out of the Docker group, restricts the public key to one fixed command, and
+allows that command to call only the root-owned deployment helper. The helper
+accepts an image bundle and a commit SHA; it does not accept a shell command.
+Remove the temporary copy after installation. The root login key remains on
+the administrator's workstation and is never added to GitHub.
+
+### GitHub settings
+
+Create a GitHub Environment named `production` and restrict deployments to the
+`main` branch. Required reviewers can be added for a manual approval gate; if
+they are configured, automatic releases will wait for that approval. Add these
+repository variables:
+
+| Variable | Value |
+| --- | --- |
+| `ALIYUN_DEPLOY_ENABLED` | `false` until the first manual release succeeds; `true` to enable automatic releases |
+| `ALIYUN_PUBLIC_BASE_URL` | Public HTTPS origin, for example `https://qr.example.com` |
+
+Add these variables to the `production` environment:
+
+| Variable | Value |
+| --- | --- |
+| `ALIYUN_DEPLOY_HOST` | ECS host name or address |
+| `ALIYUN_DEPLOY_USER` | `tpqr-deploy` |
+| `ALIYUN_DEPLOY_PORT` | SSH port, normally `22` |
+| `ALIYUN_PUBLIC_SMOKE_SLUG` | Slug of a published, non-personal smoke QR code |
+
+Add these environment secrets:
+
+| Secret | Value |
+| --- | --- |
+| `ALIYUN_DEPLOY_KEY` | Private half of the dedicated Ed25519 deployment key |
+| `ALIYUN_DEPLOY_KNOWN_HOSTS` | Verified SSH host key line for the configured host and port |
+
+The public smoke slug must resolve to a published test QR code. After release,
+the server helper checks `/api/health`, the `/s/<slug>` page, and
+`/api/public/<slug>`. It discards response bodies so public QR content is not
+written to Actions logs. A failed check restores the previous managed image;
+the first managed release falls back to the existing Compose images.
+
+### First-release baseline check
+
+Before setting `ALIYUN_DEPLOY_ENABLED=true`:
+
+1. Record the server repository's current `HEAD` and compare it with GitHub
+   `main`.
+2. Review and preserve all tracked modifications and untracked files. Do not
+   run `git reset --hard`, `git clean`, or copy a checkout over the server tree.
+3. Confirm the current live containers use the expected Compose project and
+   persistent volumes. The release helper uses `/opt/tpqr/.env` and
+   `/opt/tpqr/data` as inputs, keeps Caddy's named volumes, and stores versioned
+   release material under `/var/lib/tpqr-deploy`; it does not replace the
+   server checkout, `.env`, database, assets, backups, or OSS objects.
+4. Confirm the smoke slug is a published synthetic QR code, then run the
+   manual release from `main` with `confirm_production=yes` while watching the
+   preflight, deploy, and health-check jobs.
+5. Only after that release succeeds, set `ALIYUN_DEPLOY_ENABLED=true` for
+   unattended releases after successful `main` CI runs.
+
+The release Compose file runs the repository's committed database migrations
+against the existing SQLite file; it never replaces the file or asset
+directory. Keep migrations backward-compatible with the previous image. Plan
+and back up data before any future migration that cannot be rolled back by
+restoring the prior application image.

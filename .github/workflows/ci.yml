@@ -45,6 +45,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Validate restricted deployment scripts
+        run: |
+          for script in scripts/deploy-aliyun.sh infra/aliyun/tpqr-deploy-ssh infra/aliyun/tpqr-deploy-root infra/aliyun/install-deploy-user.sh; do
+            bash -n "$script"
+          done
       - run: npm ci
       - run: npm run lint
       - run: npm run test:unit
@@ -121,6 +126,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml config
+      - name: Validate the production image deployment compose file
+        run: TPQR_RELEASE=0000000000000000000000000000000000000000 TPQR_RUNTIME_ENV_FILE=../../.env.example docker compose --env-file .env.example -f infra/aliyun/docker-compose.release.yml config --quiet
       - name: Start local compose smoke stack
         run: |
           trap 'docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml down -v' EXIT

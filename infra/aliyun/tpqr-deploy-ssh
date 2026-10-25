@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ ! ${SSH_ORIGINAL_COMMAND:-} =~ ^deploy\ ([0-9a-f]{40})\ ([A-Za-z0-9_-]{1,80})$ ]]; then
+  echo "only a versioned TP QR deployment is permitted" >&2
+  exit 64
+fi
+
+exec sudo -n /usr/local/sbin/tpqr-deploy-root "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"

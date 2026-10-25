@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ $# -ne 2 ]]; then
+  echo "invalid deployment arguments" >&2
+  exit 64
+fi
+
+release_sha=$1
+smoke_slug=$2
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+[[ "$smoke_slug" =~ ^[A-Za-z0-9_-]{1,80}$ ]]
+[[ $(id -u) -eq 0 ]]
+[[ -f /opt/tpqr/.env ]]
+
+release_root=/var/lib/tpqr-deploy/releases
+state_root=/var/lib/tpqr-deploy
+current_link="$state_root/current"
+previous_link="$state_root/previous"
+release_dir="$release_root/$release_sha"
+install -d -o root -g root -m 0750 "$release_root"
+incoming_dir=$(mktemp -d "$release_root/.incoming-${release_sha}.XXXXXX")
+trap 'rm -rf "$incoming_dir"' EXIT
+
+archive="$incoming_dir/release.tar"
+cat > "$archive"
+[[ $(stat -c %s "$archive") -le 2147483648 ]]
+mapfile -t members < <(tar -tf "$archive" | LC_ALL=C sort)
+expected_members=$(printf '%s\n' docker-compose.release.yml images.tar.gz | LC_ALL=C sort)
+actual_members=$(printf '%s\n' "${members[@]}")
+[[ "$actual_members" == "$expected_members" ]]
+tar -tvf "$archive" | awk 'substr($0, 1, 1) != "-" { invalid = 1 } END { exit invalid || NR != 2 }'
+mkdir "$incoming_dir/extracted"
+tar -xf "$archive" -C "$incoming_dir/extracted" --no-same-owner --no-same-permissions
+[[ -s "$incoming_dir/extracted/images.tar.gz" ]]
+[[ -s "$incoming_dir/extracted/docker-compose.release.yml" ]]
+
+if [[ -e "$release_dir" && ! -d "$release_dir" ]] || [[ -L "$release_dir" ]]; then
+  echo "release path is not a regular directory" >&2
+  exit 1
+fi
+if [[ ! -d "$release_dir" ]]; then
+  install -d -o root -g root -m 0750 "$release_dir"
+  install -o root -g root -m 0640 "$incoming_dir/extracted/images.tar.gz" "$release_dir/images.tar.gz"
+  install -o root -g root -m 0640 "$incoming_dir/extracted/docker-compose.release.yml" "$release_dir/docker-compose.release.yml"
+fi
+
+compose_release() {
+  local sha=$1
+  local compose_file=$2
+  TPQR_RELEASE="$sha" TPQR_RUNTIME_ENV_FILE=/opt/tpqr/.env docker compose \
+    --project-name aliyun \
+    --env-file /opt/tpqr/.env \
+    -f "$compose_file" \
+    up -d --no-build --pull never
+}
+
+internal_api_healthy() {
+  local sha=$1
+  local compose_file=$2
+  TPQR_RELEASE="$sha" TPQR_RUNTIME_ENV_FILE=/opt/tpqr/.env docker compose \
+    --project-name aliyun \
+    --env-file /opt/tpqr/.env \
+    -f "$compose_file" \
+    exec -T api node -e 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' \
+    >/dev/null 2>&1
+}
+
+release_health_checks() {
+  local sha=$1
+  local compose_file=$2
+  for _ in $(seq 1 24); do
+    if internal_api_healthy "$sha" "$compose_file"; then
+      break
+    fi
+    sleep 5
+  done
+  internal_api_healthy "$sha" "$compose_file" && public_flow_healthy
+}
+
+public_flow_healthy() {
+  local origin
+  origin=$(awk -F= '$1 == "APP_ORIGIN" { sub(/^[^=]*=/, ""); print; exit }' /opt/tpqr/.env)
+  [[ "$origin" == https://* ]]
+  origin=${origin%/}
+  curl --fail --silent --show-error --output /dev/null --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$origin/api/health"
+  curl --fail --silent --show-error --output /dev/null --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$origin/s/$smoke_slug"
+  curl --fail --silent --show-error --output /dev/null --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$origin/api/public/$smoke_slug"
+}
+
+release_compose="$release_dir/docker-compose.release.yml"
+if ! docker load < "$release_dir/images.tar.gz" >/dev/null; then
+  echo "release image load failed" >&2
+  exit 1
+fi
+
+if compose_release "$release_sha" "$release_compose" && release_health_checks "$release_sha" "$release_compose"; then
+  if [[ -L "$current_link" ]]; then
+    old_current=$(readlink -f "$current_link")
+    case "$old_current" in
+      "$release_root"/*)
+        ln -sfn "$old_current" "$previous_link.new"
+        mv -Tf "$previous_link.new" "$previous_link"
+        ;;
+    esac
+  fi
+  ln -sfn "$release_dir" "$current_link.new"
+  mv -Tf "$current_link.new" "$current_link"
+  echo "deployment succeeded: $release_sha"
+  exit 0
+fi
+
+echo "release health check failed; restoring the previous application" >&2
+rollback_ok=false
+rollback_dir=""
+if [[ -L "$current_link" ]]; then
+  rollback_dir=$(readlink -f "$current_link")
+  if [[ "${rollback_dir##*/}" == "$release_sha" && -L "$previous_link" ]]; then
+    rollback_dir=$(readlink -f "$previous_link")
+  fi
+fi
+case "$rollback_dir" in
+  "$release_root"/*)
+    rollback_sha=${rollback_dir##*/}
+    if [[ "$rollback_sha" =~ ^[0-9a-f]{40}$ ]] \
+      && compose_release "$rollback_sha" "$rollback_dir/docker-compose.release.yml" \
+      && release_health_checks "$rollback_sha" "$rollback_dir/docker-compose.release.yml"; then
+      rollback_ok=true
+    fi
+    ;;
+  *)
+  legacy_compose=/opt/tpqr/infra/aliyun/docker-compose.yml
+  legacy_production_compose=/opt/tpqr/infra/aliyun/docker-compose.production.yml
+  if [[ -f "$legacy_compose" && -f "$legacy_production_compose" ]] && docker compose \
+    --project-name aliyun \
+    --project-directory /opt/tpqr \
+    --env-file /opt/tpqr/.env \
+    -f "$legacy_compose" \
+    -f "$legacy_production_compose" \
+    up -d --no-build --pull never; then
+    legacy_api_healthy=false
+    for _ in $(seq 1 24); do
+      if docker compose \
+        --project-name aliyun \
+        --project-directory /opt/tpqr \
+        --env-file /opt/tpqr/.env \
+        -f "$legacy_compose" \
+        -f "$legacy_production_compose" \
+        exec -T api node -e 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' \
+        >/dev/null 2>&1; then
+        legacy_api_healthy=true
+        break
+      fi
+      sleep 5
+    done
+    if [[ "$legacy_api_healthy" == true ]] && public_flow_healthy; then
+      rollback_ok=true
+    fi
+  fi
+  ;;
+esac
+
+if [[ "$rollback_ok" != true ]]; then
+  echo "automatic rollback could not restore the previous application" >&2
+fi
+exit 1
