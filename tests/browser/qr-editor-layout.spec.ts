@@ -107,11 +107,17 @@ test.describe("QR editor workbench layout", () => {
     test.skip(testInfo.project.name !== "chromium", "content model coverage runs once on desktop");
     await authenticate(page, `qr-content-preview-${Date.now()}@active.tpqr.test`);
     const created = await page.request.post("/api/codes", {
-      data: { title: "多类型预览验收", content: { type: "text", title: "初始内容", text: "测试" } },
+      data: { title: "多类型预览验收", content: { type: "image", assetId: "00000000-0000-4000-8000-000000000000", title: "", alt: "" } },
     });
     expect(created.status()).toBe(201);
     const code = (await json<{ id: string; revision: number }>(created)).data;
     if (!code) throw new Error("code creation failed");
+
+    await page.goto(`/app/codes/${code.id}/qr`);
+    await expect(page.locator(".tp-scan-preview")).toContainText("图片加载失败");
+    await page.locator(".tp-content-fields input[type=file]").setInputFiles(path.join(process.cwd(), "tmp", "fixtures", "sample-image.png"));
+    await expect(page.locator(".tp-scan-preview__viewport .public-image-only")).toBeVisible();
+    await expect(page.locator(".tp-scan-preview")).not.toContainText("图片加载失败");
 
     async function uploadAsset(name: string, mimeType: string, buffer: Buffer) {
       const uploaded = await page.request.post("/api/assets", {
@@ -216,11 +222,16 @@ test.describe("QR editor workbench layout", () => {
       expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width + 1);
       expect(viewport.previewRight).toBeLessThanOrEqual(viewport.width + 1);
     }
+    const actionBar = page.locator(".tp-publish-panel__actions");
+    const initialActionBarTop = await actionBar.evaluate((element) => element.getBoundingClientRect().top);
+    expect(initialActionBarTop).toBeGreaterThanOrEqual(0);
+    expect(await actionBar.evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(844);
     const editor = page.locator(".tp-qr-editor");
     await editor.evaluate((element) => { element.scrollTop = 0; });
     await editor.focus();
     await page.keyboard.press("PageDown");
     await expect.poll(() => editor.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect.poll(() => actionBar.evaluate((element) => element.getBoundingClientRect().top)).toBe(initialActionBarTop);
   });
 
   test("keeps initial load errors visible", async ({ page }, testInfo) => {
@@ -233,3 +244,4 @@ test.describe("QR editor workbench layout", () => {
     await expect(error).toContainText("活码不存在");
   });
 });
+

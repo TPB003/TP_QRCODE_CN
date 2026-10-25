@@ -76,7 +76,9 @@ export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false, url
   const { code } = data;
   const content = code.content;
   const copy = useCopy();
-  const [error, setError] = useState("");
+  const [mediaError, setMediaError] = useState<{ content: ActiveContent; message: string } | null>(null);
+  const error = mediaError?.content === content ? mediaError.message : "";
+  const setError = (message: string) => setMediaError({ content, message });
   const imageOnly = content.type === "image";
   const title = imageOnly ? "" : contentTitle(content) || code.title;
   const pageClass = `public-content-page public-content-page--${content.type}`;
@@ -160,3 +162,4 @@ export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false, url
     </article>
   </main>;
 }
+
