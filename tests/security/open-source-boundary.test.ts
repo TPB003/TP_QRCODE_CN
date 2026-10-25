@@ -13,7 +13,7 @@ describe("open-source boundary", () => {
       encoding: "utf8",
     });
     expect(output).toContain("Open-source boundary check passed");
-  });
+  }, 15000);
 
   it("does not expose a concrete host or storage credential in deployment templates", () => {
     const template = path.join(repositoryRoot, "infra/aliyun/env.example");

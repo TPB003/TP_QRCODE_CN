@@ -28,7 +28,6 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - run: npm run check:all
-      - run: npm run check:opensource
       - run: docker build -f infra/aliyun/Dockerfile -t tpqr-cn:${{ github.sha }} .
 
   deploy:

@@ -3,6 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 
 type Envelope<T = Record<string, unknown>> = { data?: T; error?: { code?: string; message?: string } };
 
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name === "chromium") {
+    await page.addInitScript(() => Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, get: () => 0 }));
+  }
+});
+
 async function json<T>(response: { json(): Promise<unknown> }): Promise<Envelope<T>> {
   return (await response.json()) as Envelope<T>;
 }

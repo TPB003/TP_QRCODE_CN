@@ -1,5 +1,14 @@
 # Contributing
 
+## Repository workflow
+
+- Search existing issues and pull requests before starting work.
+- Open an Issue first for a feature or other substantial behavior change. A small typo or isolated documentation fix can go straight to a PR.
+- Keep each PR focused on one Issue and one logical change. Use a branch such as `codex/123-short-description`.
+- Link the Issue in the PR body with `Closes #123`. GitHub closes it when the PR is merged.
+- Do not push directly to `main`. Wait for the required GitHub Actions checks to pass before merging.
+- Automatic merge is opt-in through the `auto-merge` label; without it, keep the PR manual.
+
 ## Development
 
 Use Node.js 22.18+ and npm 10+. Install dependencies and initialise the local
@@ -17,19 +26,19 @@ into this one.
 
 ## Pull requests
 
-Keep changes focused and include a short user-facing summary. Before opening a
-PR run:
+Before opening a PR, run:
 
 ```powershell
 npm run check:all
-npm run check:opensource
 git diff --check
 ```
 
-Please attach a screenshot or recording for visual changes and include the
-exact test commands and results.
+Add a deterministic test for new behavior. In the PR description, report only
+commands that you actually ran. GitHub Actions provides the authoritative
+required check results.
 
-Review the documentation-sync checklist:
+Attach a screenshot or recording for visual changes and include the exact
+test commands and results. Review the documentation-sync checklist:
 
 - [ ] Features and workflow describe changed behavior.
 - [ ] Homepage screenshot is current when homepage/navigation changed.

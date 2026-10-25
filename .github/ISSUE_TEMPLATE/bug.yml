@@ -3,13 +3,48 @@ description: Report a reproducible problem
 title: "[bug] "
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: "Search existing issues first. Never include secrets, personal QR payloads, production identifiers, or real submissions."
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: State what is failing and where it happens.
+    validations:
+      required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
+      description: Give the smallest repeatable sequence.
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected and actual behavior
+      label: Expected behavior
+    validations:
       required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and OS, plus app version/runtime/database when relevant.
+      placeholder: "Chrome 130, Windows 11; local or deployed"
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add a redacted screenshot, error message, or log excerpt if useful.
+    validations:
+      required: false

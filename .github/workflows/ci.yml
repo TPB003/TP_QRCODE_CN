@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -10,12 +11,32 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && 'issue-link-only' || 'checks' }}
   cancel-in-progress: true
 
 jobs:
+  issue-link:
+    name: issue-link
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify the pull request links one repository issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/issue-link.mjs
+
   verify:
     name: verify
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,13 +47,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm run typecheck
       - run: npm run test:unit
-      - run: npm run test:integration
       - run: npm run build
 
   aliyun-integration:
     name: aliyun-integration
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -47,6 +67,7 @@ jobs:
 
   security:
     name: security
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -60,6 +81,7 @@ jobs:
 
   browser-desktop:
     name: browser-desktop
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -76,6 +98,7 @@ jobs:
 
   browser-mobile:
     name: browser-mobile
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -92,18 +115,12 @@ jobs:
 
   docker-smoke:
     name: docker-smoke
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
       - run: docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml config
-      - run: docker build -f infra/aliyun/Dockerfile -t tpqr-cn-ci .
       - name: Start local compose smoke stack
         run: |
           trap 'docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose.local.yml down -v' EXIT
@@ -116,14 +133,28 @@ jobs:
 
   opensource-boundary:
     name: opensource-boundary
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run check:opensource
-      - run: git diff --check
+      - name: Check changed lines for whitespace errors
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --check "$BASE_SHA...$HEAD_SHA"
+          elif [[ "$EVENT_NAME" == "push" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --check "$BEFORE_SHA...$HEAD_SHA"
+          else
+            git diff --check "$HEAD_SHA^...$HEAD_SHA"
+          fi

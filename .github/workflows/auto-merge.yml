@@ -1,15 +1,16 @@
-name: Queue trusted pull requests
+name: Merge opt-in pull requests
 
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-  pull_request:
-    types: [labeled]
+  pull_request_target:
+    types: [labeled, ready_for_review]
+  pull_request_review:
+    types: [submitted]
 
-# This workflow runs from the default branch after CI completes. It never
-# checks out pull-request code, so the write token is not exposed to untrusted
-# workflow changes from forks.
+# Runs from the default branch and never checks out pull-request code. The
+# write token is not exposed to code from a fork.
 permissions:
   actions: write
   contents: write
@@ -17,21 +18,115 @@ permissions:
 
 jobs:
   queue:
-    name: Queue eligible PRs
+    name: Merge eligible PRs
     if: >-
-      ${{ github.event_name == 'workflow_run' &&
+      ${{ (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' }}
+      github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'pull_request_target' &&
+      ((github.event.action == 'labeled' &&
+      github.event.label.name == 'auto-merge') ||
+      github.event.action == 'ready_for_review')) ||
+      (github.event_name == 'pull_request_review' &&
+      github.event.action == 'submitted' &&
+      github.event.review.state == 'approved') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Merge or queue trusted pull requests
+      - name: Merge or queue opted-in pull requests
         uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
-            const run = context.payload.workflow_run;
-            const dispatchMainCI = async () => {
+            const isWorkflowRun = context.eventName === 'workflow_run';
+            const headSha = isWorkflowRun
+              ? context.payload.workflow_run.head_sha
+              : context.payload.pull_request.head.sha;
+
+            if (isWorkflowRun) {
+              const run = context.payload.workflow_run;
+              if (run.conclusion !== 'success' || run.event !== 'pull_request') {
+                core.info('Skipping because this is not a successful pull request CI run');
+                return;
+              }
+            } else {
+              const ciRuns = await github.paginate(
+                github.rest.actions.listWorkflowRunsForRepo,
+                { owner, repo, head_sha: headSha, event: 'pull_request', per_page: 100 },
+              );
+              const successfulCi = ciRuns.some((run) =>
+                run.name === 'CI' &&
+                run.status === 'completed' &&
+                run.conclusion === 'success' &&
+                run.head_sha === headSha,
+              );
+              if (!successfulCi) {
+                core.info('Skipping because the current head SHA has no successful CI run yet');
+                return;
+              }
+            }
+
+            const associated = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              { owner, repo, commit_sha: headSha },
+            );
+
+            for (const pull of associated) {
+              const headRepo = pull.head && pull.head.repo && pull.head.repo.full_name;
+              const author = pull.user && pull.user.login;
+              const trustedAuthor = author === 'TPB003' || author === 'dependabot[bot]';
+              const optedIn = pull.labels && pull.labels.some((label) => label.name === 'auto-merge');
+              const optedOut = pull.labels && pull.labels.some((label) =>
+                ['no-auto-merge', 'do-not-merge'].includes(label.name),
+              );
+
+              if (
+                pull.state !== 'open' ||
+                pull.base.ref !== 'main' ||
+                pull.draft ||
+                headRepo !== owner + '/' + repo ||
+                !trustedAuthor ||
+                !optedIn ||
+                optedOut
+              ) {
+                core.info('Skipping PR #' + pull.number + ': it is not explicitly opted in');
+                continue;
+              }
+
+              const details = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pull.number,
+              });
+              if (details.data.head.sha !== headSha) {
+                core.info('Skipping PR #' + pull.number + ': CI belongs to an older commit');
+                continue;
+              }
+
+              if (details.data.mergeable_state !== 'clean') {
+                core.info(
+                  'Skipping PR #' + pull.number +
+                  ': required merge conditions are not currently satisfied',
+                );
+                continue;
+              }
+
+              const merged = await github.rest.pulls.merge({
+                owner,
+                repo,
+                pull_number: pull.number,
+                sha: headSha,
+                merge_method: 'squash',
+              });
+              if (!merged.data.merged) {
+                core.setFailed(
+                  'Unable to merge PR #' + pull.number + ': ' +
+                  (merged.data.message || 'merge was not completed'),
+                );
+                continue;
+              }
+
+              core.info('Merged PR #' + pull.number + ' after successful CI');
               await github.rest.actions.createWorkflowDispatch({
                 owner,
                 repo,
@@ -39,94 +134,12 @@ jobs:
                 ref: 'main',
               });
               core.info('Dispatched main CI after a token-authenticated merge');
-            };
-            const associated = await github.paginate(
-              github.rest.repos.listPullRequestsAssociatedWithCommit,
-              { owner, repo, commit_sha: run.head_sha },
-            );
-
-            for (const pull of associated) {
-              const headRepo = pull.head?.repo?.full_name;
-              const author = pull.user?.login;
-              const trustedAuthor = author === 'TPB003' || author === 'dependabot[bot]';
-              const optedOut = pull.labels?.some((label) =>
-                ['no-auto-merge', 'do-not-merge'].includes(label.name),
-              );
-
-              if (
-                pull.state !== 'open' ||
-                pull.base?.ref !== 'main' ||
-                pull.draft ||
-                headRepo !== `${owner}/${repo}` ||
-                !trustedAuthor ||
-                optedOut
-              ) {
-                core.info(`Skipping PR #${pull.number}: not eligible for automatic merge`);
-                continue;
-              }
-
-              const details = await github.rest.pulls.get({ owner, repo, pull_number: pull.number });
-              if (details.data.head.sha !== run.head_sha) {
-                core.info(`Skipping PR #${pull.number}: CI result is for an older commit`);
-                continue;
-              }
-
-              if (details.data.mergeable_state === 'clean') {
-                const merged = await github.rest.pulls.merge({
-                  owner,
-                  repo,
-                  pull_number: pull.number,
-                  sha: run.head_sha,
-                  merge_method: 'squash',
-                });
-                if (!merged.data.merged) {
-                  core.setFailed(`Unable to merge PR #${pull.number}: ${merged.data.message ?? 'merge was not completed'}`);
-                } else {
-                  core.info(`Merged PR #${pull.number} after successful CI`);
-                  await dispatchMainCI();
-                }
-                continue;
-              }
-
-              try {
-                await github.graphql(
-                  `mutation EnableAutoMerge($pullRequestId: ID!) {
-                    enablePullRequestAutoMerge(input: {
-                      pullRequestId: $pullRequestId,
-                      mergeMethod: SQUASH
-                    }) {
-                      pullRequest { number }
-                    }
-                  }`,
-                  { pullRequestId: pull.node_id },
-                );
-                core.info(`Auto-merge enabled for PR #${pull.number}`);
-              } catch (error) {
-                const refreshed = await github.rest.pulls.get({ owner, repo, pull_number: pull.number });
-                if (refreshed.data.head.sha === run.head_sha && refreshed.data.mergeable_state === 'clean') {
-                  const merged = await github.rest.pulls.merge({
-                    owner,
-                    repo,
-                    pull_number: pull.number,
-                    sha: run.head_sha,
-                    merge_method: 'squash',
-                  });
-                  if (!merged.data.merged) {
-                    core.setFailed(`Unable to merge PR #${pull.number}: ${merged.data.message ?? error.message}`);
-                  } else {
-                    core.info(`Merged PR #${pull.number} after auto-merge became clean`);
-                    await dispatchMainCI();
-                  }
-                } else {
-                  core.setFailed(`Unable to enable auto-merge for PR #${pull.number}: ${error.message}`);
-                }
-              }
             }
 
   disable-opt-out:
     name: Disable auto-merge after opt-out label
     if: >-
-      ${{ github.event_name == 'pull_request' &&
+      ${{ github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -137,31 +150,32 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const pull = context.payload.pull_request;
-            const label = context.payload.label?.name;
+            const label = context.payload.label && context.payload.label.name;
             const optedOutLabels = ['no-auto-merge', 'do-not-merge'];
 
             if (!optedOutLabels.includes(label)) {
-              core.info(`Ignoring label ${label ?? '(none)'}`);
+              core.info('Ignoring label ' + (label || '(none)'));
               return;
             }
 
-            const trustedAuthor = ['TPB003', 'dependabot[bot]'].includes(pull.user?.login);
-            const sameRepository = pull.head?.repo?.full_name === `${owner}/${repo}`;
-            if (pull.base?.ref !== 'main' || !trustedAuthor || !sameRepository) {
-              core.info(`Skipping auto-merge disable for PR #${pull.number}: untrusted or external head`);
+            const trustedAuthor = ['TPB003', 'dependabot[bot]'].includes(pull.user && pull.user.login);
+            const sameRepository =
+              pull.head && pull.head.repo && pull.head.repo.full_name === owner + '/' + repo;
+            if (pull.base.ref !== 'main' || !trustedAuthor || !sameRepository) {
+              core.info('Skipping auto-merge disable: untrusted or external head');
               return;
             }
 
             try {
               await github.graphql(
-                `mutation DisableAutoMerge($pullRequestId: ID!) {
-                  disablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId }) {
-                    pullRequest { number }
-                  }
-                }`,
+                'mutation DisableAutoMerge($pullRequestId: ID!) {' +
+                ' disablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId }) {' +
+                ' pullRequest { number } } }',
                 { pullRequestId: pull.node_id },
               );
-              core.info(`Auto-merge disabled for PR #${pull.number}`);
+              core.info('Auto-merge disabled for PR #' + pull.number);
             } catch (error) {
-              core.setFailed(`Unable to disable auto-merge for PR #${pull.number}: ${error.message}`);
+              core.setFailed(
+                'Unable to disable auto-merge for PR #' + pull.number + ': ' + error.message,
+              );
             }

@@ -4,6 +4,12 @@ import { expect, test, type Page } from "@playwright/test";
 const require = createRequire(import.meta.url);
 const jsQrScript = require.resolve("jsqr");
 
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name === "chromium") {
+    await page.addInitScript(() => Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, get: () => 0 }));
+  }
+});
+
 type Envelope<T> = { data?: T };
 
 async function json<T>(response: { json(): Promise<unknown> }): Promise<Envelope<T>> {
