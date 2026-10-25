@@ -5,7 +5,7 @@ import { AppShell } from "@client/components/layout/app-shell";
 import { QrSpecimen } from "@client/components/ui/qr-specimen";
 import { api } from "@client/lib/api";
 import type { CodeSummary } from "@client/lib/api";
-import type { ActiveContent, ActiveContentType } from "@tpqr/domain";
+import type { AccountAnalyticsSummary, ActiveContent, ActiveContentType } from "@tpqr/domain";
 import { emptyContent } from "@client/features/content-editor/content-editor-model";
 import "../dashboard.css";
 import "../dashboard-overrides.css";
@@ -13,7 +13,7 @@ import "../dashboard-overrides.css";
 type CodeType = ActiveContentType;
 type Filter = "全部" | "已发布" | "草稿" | "已暂停";
 type Metric = "scans" | "views" | "clicks" | "downloads" | "plays";
-type AnalyticsPoint = { date: string; scans: number; views: number; clicks: number; downloads: number; plays: number };
+type AnalyticsPoint = AccountAnalyticsSummary["trend"][number];
 
 const metricOptions: Array<{ key: Metric; label: string }> = [
   { key: "scans", label: "扫码" },
@@ -54,18 +54,6 @@ function initialContent(type: CodeType): ActiveContent {
   return { ...emptyContent(type), title: `新的${typeLabels[type]}活码` };
 }
 
-async function readAnalytics(codeId: string, days: number): Promise<AnalyticsPoint[]> {
-  try {
-    const response = await fetch(`/api/codes/${encodeURIComponent(codeId)}/analytics?days=${days}`, { credentials: "include" });
-    if (!response.ok) return [];
-    const payload: unknown = await response.json();
-    const body = payload as { data?: { items?: AnalyticsPoint[] } };
-    return body.data?.items ?? [];
-  } catch {
-    return [];
-  }
-}
-
 export function DashboardView() {
   const [searchParams] = useSearchParams();
   const view = searchParams.get("view") === "analytics" ? "analytics" : searchParams.get("view") === "codes" ? "codes" : searchParams.get("view") === "types" ? "types" : "overview";
@@ -74,7 +62,7 @@ export function DashboardView() {
   const [codes, setCodes] = useState<CodeSummary[]>([]);
   const [days, setDays] = useState<7 | 30 | 90>(30);
   const [metric, setMetric] = useState<Metric>("scans");
-  const [analytics, setAnalytics] = useState<Record<string, AnalyticsPoint[]>>({});
+  const [analytics, setAnalytics] = useState<AccountAnalyticsSummary | null>(null);
   const [creating, setCreating] = useState(false);
   const [createNotice, setCreateNotice] = useState("");
   const [newName, setNewName] = useState("新建活码");
@@ -92,23 +80,16 @@ export function DashboardView() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all(codes.map((code) => readAnalytics(code.id, days).then((points) => [code.id, points] as const))).then((items) => {
-      if (active) setAnalytics(Object.fromEntries(items));
+    void api.dashboardAnalytics(days).then((result) => {
+      if (active) setAnalytics(result);
+    }).catch(() => {
+      if (active) setAnalytics({ days, trend: [], byCode: [] });
     });
     return () => { active = false; };
-  }, [codes, days]);
+  }, [days]);
 
-  const metricTotals = useMemo(() => Object.fromEntries(codes.map((code) => [
-    code.id,
-    (analytics[code.id] ?? []).reduce((sum, point) => sum + Number(point[metric] ?? 0), 0),
-  ])), [analytics, codes, metric]);
-  const trend = useMemo(() => {
-    const values = new Map<string, number>();
-    Object.values(analytics).forEach((points) => points.forEach((point) => {
-      values.set(point.date, (values.get(point.date) ?? 0) + Number(point[metric] ?? 0));
-    }));
-    return [...values.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, value]) => value);
-  }, [analytics, metric]);
+  const metricTotals = useMemo(() => Object.fromEntries((analytics?.byCode ?? []).map((code) => [code.codeId, code[metric]])), [analytics, metric]);
+  const trend = useMemo(() => (analytics?.trend ?? []).map((point: AnalyticsPoint) => point[metric]), [analytics, metric]);
 
   const visibleCodes = useMemo(() => codes.filter((code) => {
     const status = codeStatusLabel(code);

@@ -41,10 +41,22 @@ test.describe("扫码统计", () => {
     await sevenDaysResponse;
     await expect(page.getByRole("heading", { name: "最近 7 天点击趋势" })).toBeVisible();
 
+    const dashboardAnalyticsPaths: string[] = [];
+    const trackDashboardAnalytics = (request: { url(): string }) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/codes/") && url.pathname.endsWith("/analytics")) dashboardAnalyticsPaths.push(`${url.pathname}${url.search}`);
+    };
+    page.on("request", trackDashboardAnalytics);
+    const defaultSummaryResponse = page.waitForResponse((response) => response.url().includes("/api/codes/analytics?days=30"));
     await page.goto("/app?view=analytics");
-    const globalRangeResponse = page.waitForResponse((response) => response.url().includes(`/api/codes/${code.id}/analytics?days=7`));
+    await defaultSummaryResponse;
+    const globalRangeResponse = page.waitForResponse((response) => response.url().includes("/api/codes/analytics?days=7"));
     await page.getByRole("button", { name: "最近 7 天" }).click();
     await globalRangeResponse;
+    page.off("request", trackDashboardAnalytics);
+    expect(dashboardAnalyticsPaths).toContain("/api/codes/analytics?days=30");
+    expect(dashboardAnalyticsPaths).toContain("/api/codes/analytics?days=7");
+    expect(dashboardAnalyticsPaths).not.toContain(`/api/codes/${code.id}/analytics?days=30`);
     await page.getByRole("tab", { name: "点击", exact: true }).click();
     await expect(page.getByRole("img", { name: "最近 7 天点击趋势" })).toBeVisible();
     await expect(page.locator(".dashboard-analytics__row").filter({ hasText: "统计交互验收" })).toContainText("1");

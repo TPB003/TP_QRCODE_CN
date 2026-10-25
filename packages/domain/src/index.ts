@@ -5,6 +5,6 @@ export * from "./schemas/active-content";
 export * from "./schemas/auth";
 export * from "./schemas/form";
 export * from "./schemas/project";
-export type { QrCode } from "./types/active";
+export type { AccountAnalyticsMetrics, AccountAnalyticsSummary, QrCode } from "./types/active";
 export * from "./types/domain";
 export * from "./lib/slug";

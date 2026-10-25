@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   activeContentSchema,
   type ActiveContent,
+  type AccountAnalyticsMetrics,
+  type AccountAnalyticsSummary,
   type PublicContentResponse,
   type QrRenderConfig,
 } from "@tpqr/domain";
@@ -129,6 +131,52 @@ codeRoutes.get("/codes", async (c) => {
   const user = await currentUser(c); if (!user) return apiError(c, 401, "UNAUTHORIZED", "请先登录");
   const rows = await c.env.DB.prepare("SELECT c.*, (SELECT v.version FROM qr_code_versions v WHERE v.id = c.published_version_id LIMIT 1) AS published_version FROM qr_codes c WHERE c.owner_id = ? AND c.deleted_at IS NULL ORDER BY c.updated_at DESC LIMIT 200").bind(user.id).all<CodeRow>();
   return c.json({ data: { items: rows.results.map(codePayload), nextCursor: null } });
+});
+
+codeRoutes.get("/codes/analytics", async (c) => {
+  const user = await currentUser(c); if (!user) return apiError(c, 401, "UNAUTHORIZED", "请先登录");
+  const parsedDays = z.enum(["7", "30", "90"]).safeParse(c.req.query("days") ?? "30");
+  if (!parsedDays.success) return apiError(c, 422, "VALIDATION_ERROR", "统计范围必须为 7、30 或 90 天");
+
+  const days = Number(parsedDays.data) as AccountAnalyticsSummary["days"];
+  const endDate = nowIso().slice(0, 10);
+  const startDateValue = new Date(`${endDate}T00:00:00.000Z`);
+  startDateValue.setUTCDate(startDateValue.getUTCDate() - days + 1);
+  const startDate = startDateValue.toISOString().slice(0, 10);
+  type AnalyticsRow = { code_id: string; date: string | null } & Record<keyof AccountAnalyticsMetrics, number | null>;
+  const rows = await c.env.DB.prepare("SELECT c.id AS code_id, a.date, a.scans, a.views, a.clicks, a.downloads, a.plays FROM qr_codes c LEFT JOIN analytics_daily_codes a ON a.code_id = c.id AND a.date >= ? AND a.date <= ? WHERE c.owner_id = ? AND c.deleted_at IS NULL ORDER BY c.updated_at DESC, a.date ASC")
+    .bind(startDate, endDate, user.id)
+    .all<AnalyticsRow>();
+
+  const metrics: Array<keyof AccountAnalyticsMetrics> = ["scans", "views", "clicks", "downloads", "plays"];
+  const byCode = new Map<string, { codeId: string } & AccountAnalyticsMetrics>();
+  const trendByDate = new Map<string, { date: string } & AccountAnalyticsMetrics>();
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = new Date(`${startDate}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + offset);
+    const key = date.toISOString().slice(0, 10);
+    trendByDate.set(key, { date: key, scans: 0, views: 0, clicks: 0, downloads: 0, plays: 0 });
+  }
+
+  for (const row of rows.results) {
+    let code = byCode.get(row.code_id);
+    if (!code) {
+      code = { codeId: row.code_id, scans: 0, views: 0, clicks: 0, downloads: 0, plays: 0 };
+      byCode.set(row.code_id, code);
+    }
+    if (!row.date) continue;
+
+    const daily = trendByDate.get(row.date);
+    if (!daily) continue;
+    for (const metric of metrics) {
+      const value = row[metric] ?? 0;
+      code[metric] += value;
+      daily[metric] += value;
+    }
+  }
+
+  const summary: AccountAnalyticsSummary = { days, trend: [...trendByDate.values()], byCode: [...byCode.values()] };
+  return c.json({ data: summary });
 });
 
 codeRoutes.post("/codes", async (c) => {

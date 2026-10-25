@@ -6,6 +6,8 @@ type JsonBody<T = Record<string, unknown>> = { data?: T; error?: { code: string;
 type CookieJar = string;
 type CodePayload = { id: string; slug: string; revision: number; status: string; content: Record<string, unknown> };
 type PublicPayload = { code: { contentType: string; content: Record<string, unknown> }; assets: Array<{ id: string; url: string }> };
+type AnalyticsMetrics = { scans: number; views: number; clicks: number; downloads: number; plays: number };
+type AccountAnalyticsPayload = { days: number; trend: Array<{ date: string } & AnalyticsMetrics>; byCode: Array<{ codeId: string } & AnalyticsMetrics> };
 
 async function json<T extends JsonBody = JsonBody>(response: Response): Promise<T> {
   const value: unknown = await response.json();
@@ -51,6 +53,14 @@ async function publish(cookie: CookieJar, code: { id: string; revision: number }
     headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify({ revision: code.revision }),
   });
+}
+
+async function insertAnalytics(database: SqlDatabase, codeId: string, dayOffset: number, metrics: AnalyticsMetrics) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - dayOffset);
+  await database.prepare("INSERT INTO analytics_daily_codes (code_id, date, scans, views, clicks, downloads, plays) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(codeId, date.toISOString().slice(0, 10), metrics.scans, metrics.views, metrics.clicks, metrics.downloads, metrics.plays)
+    .run();
 }
 
 describe("active QR code API", () => {
@@ -239,5 +249,69 @@ describe("active QR code API", () => {
     const rows = (await json<{ data: { items: Array<{ scans: number; downloads: number }> } }>(analytics)).data.items;
     expect(rows.reduce((sum, row) => sum + Number(row.scans), 0)).toBeGreaterThanOrEqual(1);
     expect(rows.reduce((sum, row) => sum + Number(row.downloads), 0)).toBe(1);
+  });
+
+  it("returns an empty account summary with a complete daily range", async () => {
+    const anonymous = await SELF.fetch("http://local/api/codes/analytics");
+    expect(anonymous.status).toBe(401);
+
+    const cookie = await login("dashboard-empty");
+    const invalidRange = await SELF.fetch("http://local/api/codes/analytics?days=14", { headers: { Cookie: cookie } });
+    expect(invalidRange.status).toBe(422);
+
+    const response = await SELF.fetch("http://local/api/codes/analytics?days=7", { headers: { Cookie: cookie } });
+    expect(response.status).toBe(200);
+    const summary = (await json<{ data: AccountAnalyticsPayload }>(response)).data;
+    expect(summary.days).toBe(7);
+    expect(summary.byCode).toEqual([]);
+    expect(summary.trend).toHaveLength(7);
+    expect(summary.trend.every((point) => Object.values(point).every((value) => value === 0 || typeof value === "string"))).toBe(true);
+  });
+
+  it("aggregates supported ranges by owner, excluding deleted codes", async () => {
+    const database = (env as unknown as { DB: SqlDatabase }).DB;
+    const owner = await login("dashboard-analytics-owner");
+    const activeCode = await createCode(owner);
+    const emptyCode = await createCode(owner);
+    const deletedCode = await createCode(owner);
+    const otherOwner = await login("dashboard-analytics-other");
+    const otherCode = await createCode(otherOwner);
+
+    await insertAnalytics(database, activeCode.id, 1, { scans: 1, views: 2, clicks: 3, downloads: 4, plays: 5 });
+    await insertAnalytics(database, activeCode.id, 2, { scans: 6, views: 7, clicks: 8, downloads: 9, plays: 10 });
+    await insertAnalytics(database, activeCode.id, 7, { scans: 100, views: 200, clicks: 300, downloads: 400, plays: 500 });
+    await insertAnalytics(database, activeCode.id, 89, { scans: 1_000, views: 2_000, clicks: 3_000, downloads: 4_000, plays: 5_000 });
+    await insertAnalytics(database, activeCode.id, 90, { scans: 9_000, views: 9_000, clicks: 9_000, downloads: 9_000, plays: 9_000 });
+    await insertAnalytics(database, deletedCode.id, 1, { scans: 500, views: 500, clicks: 500, downloads: 500, plays: 500 });
+    await insertAnalytics(database, otherCode.id, 1, { scans: 600, views: 600, clicks: 600, downloads: 600, plays: 600 });
+
+    const deleted = await SELF.fetch(`http://local/api/codes/${deletedCode.id}`, { method: "DELETE", headers: { Cookie: owner } });
+    expect(deleted.status).toBe(200);
+
+    const expectedByRange: Record<number, AnalyticsMetrics> = {
+      7: { scans: 7, views: 9, clicks: 11, downloads: 13, plays: 15 },
+      30: { scans: 107, views: 209, clicks: 311, downloads: 413, plays: 515 },
+      90: { scans: 1_107, views: 2_209, clicks: 3_311, downloads: 4_413, plays: 5_515 },
+    };
+
+    for (const days of [7, 30, 90] as const) {
+      const response = await SELF.fetch(`http://local/api/codes/analytics?days=${days}`, { headers: { Cookie: owner } });
+      expect(response.status).toBe(200);
+      const summary = (await json<{ data: AccountAnalyticsPayload }>(response)).data;
+      expect(summary.days).toBe(days);
+      expect(summary.trend).toHaveLength(days);
+      expect(summary.trend.map((point) => point.date)).toEqual([...summary.trend.map((point) => point.date)].sort());
+      expect(summary.byCode).toHaveLength(2);
+
+      const activeSummary = summary.byCode.find((item) => item.codeId === activeCode.id);
+      expect(activeSummary).toMatchObject(expectedByRange[days]);
+      expect(summary.byCode.find((item) => item.codeId === emptyCode.id)).toMatchObject({ scans: 0, views: 0, clicks: 0, downloads: 0, plays: 0 });
+      expect(summary.byCode.some((item) => item.codeId === deletedCode.id || item.codeId === otherCode.id)).toBe(false);
+      expect(summary.trend.reduce((sum, point) => sum + point.scans, 0)).toBe(expectedByRange[days].scans);
+      expect(summary.trend.reduce((sum, point) => sum + point.views, 0)).toBe(expectedByRange[days].views);
+      expect(summary.trend.reduce((sum, point) => sum + point.clicks, 0)).toBe(expectedByRange[days].clicks);
+      expect(summary.trend.reduce((sum, point) => sum + point.downloads, 0)).toBe(expectedByRange[days].downloads);
+      expect(summary.trend.reduce((sum, point) => sum + point.plays, 0)).toBe(expectedByRange[days].plays);
+    }
   });
 });

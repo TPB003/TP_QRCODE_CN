@@ -1,5 +1,5 @@
 import type { FormSchema, ProjectDraft } from "@shared/types/domain";
-import type { ActiveContent, PublicContentResponse, QrRenderConfig } from "@tpqr/domain";
+import type { AccountAnalyticsSummary, ActiveContent, PublicContentResponse, QrRenderConfig } from "@tpqr/domain";
 import { apiClient } from "@client/lib/api-client";
 
 export interface CodeSummary {
@@ -95,6 +95,7 @@ export const api = {
   },
   deleteAsset: (assetId: string) => apiClient.delete<{ deleted: boolean }>(`/api/assets/${assetId}`),
   codes: () => apiClient.get<CodeListResponse>("/api/codes"),
+  dashboardAnalytics: (days: AccountAnalyticsSummary["days"] = 30) => apiClient.get<AccountAnalyticsSummary>(`/api/codes/analytics?days=${days}`),
   code: (codeId: string) => apiClient.get<CodeSummary>(`/api/codes/${encodeURIComponent(codeId)}`),
   createCode: (title: string, content: ActiveContent, render?: Partial<QrRenderConfig>) => apiClient.post<CodeSummary>("/api/codes", { title, content, render }),
   updateCode: (codeId: string, revision: number, data: { title?: string; content?: ActiveContent; render?: Partial<QrRenderConfig>; status?: "active" | "paused" }) => apiClient.patch<CodeSummary>(`/api/codes/${encodeURIComponent(codeId)}`, { ...data, revision }),
