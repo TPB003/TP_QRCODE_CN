@@ -86,13 +86,28 @@ test.describe("second-pass product regressions", () => {
 
   test("dashboard navigation exposes separate codes and analytics views", async ({ page }, testInfo) => {
     await authenticate(page, `dashboard-views-${Date.now()}-${testInfo.project.name}@active.tpqr.test`);
-    await page.goto("/app");
     const mobile = testInfo.project.name === "mobile";
+    const views = [
+      { path: "/app", href: "/app" },
+      { path: "/app?view=codes", href: "/app?view=codes" },
+      { path: "/app?view=types", href: "/app?view=types" },
+      { path: "/app?view=analytics", href: "/app?view=analytics" },
+    ];
+    const currentNavigation = page.locator('nav[aria-label="工作台导航"] a[aria-current="page"]');
+    for (const view of views) {
+      await page.goto(view.path);
+      await expect(currentNavigation).toHaveCount(1);
+      await expect(currentNavigation).toHaveAttribute("href", view.href);
+    }
+
+    await page.goto("/app");
     if (mobile) await page.getByRole("button", { name: /打开工作台导航/ }).click();
     const analytics = page.getByRole("link", { name: "扫码统计" });
     await expect(analytics).toBeVisible();
     await analytics.click();
     await expect(page).toHaveURL(/\/app\?view=analytics$/);
+    await expect(currentNavigation).toHaveText("扫码统计");
+    if (mobile) await expect(page.getByRole("button", { name: /打开工作台导航/ })).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("heading", { name: /扫码统计|SCAN DATA/ })).toBeVisible({ timeout: 20000 });
 
     if (mobile) await page.getByRole("button", { name: /打开工作台导航/ }).click();
@@ -100,7 +115,54 @@ test.describe("second-pass product regressions", () => {
     await expect(codes).toBeVisible();
     await codes.click();
     await expect(page).toHaveURL(/\/app\?view=codes$/);
+    await expect(currentNavigation).toHaveText("我的活码");
     await expect(page.getByRole("heading", { name: /我的活码|MY CODES/ })).toBeVisible({ timeout: 20000 });
+  });
+
+  test("project navigation reaches each code section and returns from the decoder", async ({ page }, testInfo) => {
+    await authenticate(page, `project-navigation-${Date.now()}-${testInfo.project.name}@active.tpqr.test`);
+    const created = await page.request.post("/api/codes", { data: { title: "导航回归活码", content: { type: "text", title: "导航回归活码", text: "页面导航测试" } } });
+    expect(created.status()).toBe(201);
+    const code = (await json<{ id: string }>(created)).data;
+    if (!code) throw new Error("创建导航测试活码失败");
+
+    const mobile = testInfo.project.name === "mobile";
+    const viewports = mobile ? [{ width: 390, height: 844 }, { width: 375, height: 812 }] : [{ width: 1440, height: 900 }];
+    const projectCurrent = page.locator('nav[aria-label="项目导航"] a[aria-current="page"]');
+    const sections = [
+      { label: "二维码编辑", path: `/app/codes/${code.id}/qr` },
+      { label: "版本记录", path: `/app/codes/${code.id}/versions` },
+      { label: "扫码统计", path: `/app/codes/${code.id}/analytics` },
+      { label: "活码设置", path: `/app/codes/${code.id}/settings` },
+    ];
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await page.goto(sections[0].path);
+      await expect(projectCurrent).toHaveCount(1);
+      await expect(projectCurrent).toHaveText(sections[0].label);
+
+      for (const section of sections.slice(1)) {
+        if (mobile) await page.getByRole("button", { name: "打开项目导航" }).click();
+        await page.getByRole("link", { name: section.label, exact: true }).click();
+        await expect(page).toHaveURL(section.path);
+        await expect(projectCurrent).toHaveCount(1);
+        await expect(projectCurrent).toHaveText(section.label);
+        if (mobile) await expect(page.getByRole("button", { name: "打开项目导航" })).toHaveAttribute("aria-expanded", "false");
+      }
+
+      if (mobile) await page.getByRole("button", { name: "打开项目导航" }).click();
+      await page.getByRole("link", { name: "二维码编辑", exact: true }).click();
+      await expect(page).toHaveURL(sections[0].path);
+      if (mobile) await page.getByRole("button", { name: "打开项目导航" }).click();
+      await page.getByRole("link", { name: "解码器", exact: true }).click();
+      await expect(page).toHaveURL("/decoder");
+      await expect(page.getByRole("link", { name: "返回工作台" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "返回首页" })).toBeVisible();
+      await page.getByRole("link", { name: "返回工作台" }).click();
+      await expect(page).toHaveURL("/app");
+      await expect(page.getByRole("heading", { name: /ACTIVE CODES/ })).toBeVisible();
+    }
   });
 
   test("homepage no longer advertises retired inspection, batch, or fake QR examples", async ({ page }) => {

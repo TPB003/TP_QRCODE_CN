@@ -1,19 +1,22 @@
 import { useEffect, useState, type CSSProperties, type PropsWithChildren } from "react";
 import { BarChart3, FolderKanban, LayoutDashboard, LogOut, PanelsTopLeft, UserCircle2 } from "lucide-react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { LogoMark } from "@client/components/ui/logo-mark";
 import { generatedAssets } from "@client/lib/assets";
 import { api } from "@client/lib/api";
 import "./shell.css";
 
 const globalNavigation = [
-  { to: "/app", label: "工作台", icon: LayoutDashboard },
-  { to: "/app?view=codes", label: "我的活码", icon: FolderKanban },
-  { to: "/app?view=types", label: "内容类型", icon: PanelsTopLeft },
-  { to: "/app?view=analytics", label: "扫码统计", icon: BarChart3 },
+  { to: "/app", view: "overview", label: "工作台", icon: LayoutDashboard },
+  { to: "/app?view=codes", view: "codes", label: "我的活码", icon: FolderKanban },
+  { to: "/app?view=types", view: "types", label: "内容类型", icon: PanelsTopLeft },
+  { to: "/app?view=analytics", view: "analytics", label: "扫码统计", icon: BarChart3 },
 ];
 
 export function AppShell({ children }: PropsWithChildren) {
+  const location = useLocation();
+  const requestedView = new URLSearchParams(location.search).get("view");
+  const activeView = requestedView === "codes" || requestedView === "types" || requestedView === "analytics" ? requestedView : "overview";
   const [menuOpen, setMenuOpen] = useState(false);
   const [userLabel, setUserLabel] = useState<string | null>(null);
 
@@ -56,9 +59,10 @@ export function AppShell({ children }: PropsWithChildren) {
       {menuOpen ? <button className="shell-drawer-backdrop" type="button" aria-label="关闭导航" onClick={() => setMenuOpen(false)} /> : null}
       <aside className={`app-sidebar ${menuOpen ? "is-open" : ""}`}>
         <nav aria-label="工作台导航">
-          {globalNavigation.map(({ to, label, icon: Icon }) => (
-            <NavLink key={label} to={to} end={label === "工作台"} onClick={() => setMenuOpen(false)}><Icon /><span>{label}</span></NavLink>
-          ))}
+          {globalNavigation.map(({ to, view, label, icon: Icon }) => {
+            const current = location.pathname === "/app" && activeView === view;
+            return <Link key={label} to={to} className={current ? "active" : undefined} aria-current={current ? "page" : undefined} onClick={() => setMenuOpen(false)}><Icon /><span>{label}</span></Link>;
+          })}
         </nav>
         <div className="shell-account-card" aria-label="个人账号">
           <div className="shell-account-card__identity"><UserCircle2 aria-hidden="true" /><div><strong>个人账号</strong><span>{userLabel ?? "正在读取账号"}</span></div></div>
