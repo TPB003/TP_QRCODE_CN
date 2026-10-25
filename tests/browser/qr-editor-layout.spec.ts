@@ -49,6 +49,7 @@ test.describe("QR editor workbench layout", () => {
     await page.getByRole("button", { name: "预览", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "草稿预览" })).toBeVisible();
     await expect(page.getByRole("button", { name: "关闭预览" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "复制文字" })).toHaveCSS("color", "rgb(15, 23, 42)");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "草稿预览" })).toHaveCount(0);
 
@@ -72,8 +73,12 @@ test.describe("QR editor workbench layout", () => {
     await page.goto(`/app/codes/${code.id}/qr`);
     await expect(page.locator(".tp-qr-preview")).toBeVisible({ timeout: 20000 });
     await expect(page.locator(".tp-publish-panel__actions")).toBeVisible();
-    const viewport = await page.evaluate(() => ({ width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth }));
-    expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width);
+    for (const viewportSize of [{ width: 375, height: 812 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewportSize);
+      const viewport = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.querySelector("#root")?.scrollWidth ?? 0, previewRight: document.querySelector(".tp-qr-preview")?.getBoundingClientRect().right ?? 0 }));
+      expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(viewport.previewRight).toBeLessThanOrEqual(viewport.width + 1);
+    }
   });
 
   test("keeps initial load errors visible", async ({ page }, testInfo) => {

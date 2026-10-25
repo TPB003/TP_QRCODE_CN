@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, FileAudio, FileImage, FileText, FileVideo, Globe2, Plus, QrCode, Search, UserRound } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@client/components/layout/app-shell";
@@ -90,11 +91,13 @@ export function DashboardView() {
 
   const metricTotals = useMemo(() => Object.fromEntries((analytics?.byCode ?? []).map((code) => [code.codeId, code[metric]])), [analytics, metric]);
   const trend = useMemo(() => (analytics?.trend ?? []).map((point: AnalyticsPoint) => point[metric]), [analytics, metric]);
+  const hasTrendData = trend.some((value) => value > 0);
 
   const visibleCodes = useMemo(() => codes.filter((code) => {
     const status = codeStatusLabel(code);
     return (filter === "全部" || filter === status) && code.title.toLowerCase().includes(search.trim().toLowerCase());
   }), [codes, filter, search]);
+  const hasSearchOrFilter = filter !== "全部" || search.trim().length > 0;
 
   async function createCode() {
     try {
@@ -142,7 +145,7 @@ export function DashboardView() {
         <div className="dashboard-trend__metrics" role="tablist" aria-label="统计指标">
           {metricOptions.map((item) => <button key={item.key} type="button" role="tab" aria-selected={metric === item.key} onClick={() => setMetric(item.key)}>{item.label}</button>)}
         </div>
-        <svg viewBox="0 0 560 230" role="img" aria-label={`最近 ${days} 天${metricOptions.find((item) => item.key === metric)?.label ?? "扫码"}趋势`}>{[0, 1, 2, 3].map((lineIndex) => <line key={lineIndex} x1="0" x2="560" y1={lineIndex * 65 + 15} y2={lineIndex * 65 + 15} />)}<polyline points={trendPoints(trend)} /></svg>
+        {hasTrendData ? <svg viewBox="0 0 560 230" role="img" aria-label={`最近 ${days} 天${metricOptions.find((item) => item.key === metric)?.label ?? "扫码"}趋势`}>{[0, 1, 2, 3].map((lineIndex) => <line key={lineIndex} x1="0" x2="560" y1={lineIndex * 65 + 15} y2={lineIndex * 65 + 15} />)}<polyline points={trendPoints(trend)} /></svg> : <p className="dashboard-trend__empty" role="status">{analytics ? "所选时间范围内暂无统计数据" : "正在加载统计数据…"}</p>}
       </article> : null}
 
       {view === "analytics" ? <article className="dashboard-analytics paper-panel" aria-label="扫码统计明细"><header><h2>按活码统计</h2><span>最近 {days} 天{metricOptions.find((item) => item.key === metric)?.label}次数</span></header>{visibleCodes.map((code) => <div className="dashboard-analytics__row" key={code.id}><span>{code.title}</span><strong>{metricTotals[code.id] ?? 0}</strong><small>次{metricOptions.find((item) => item.key === metric)?.label}</small></div>)}{visibleCodes.length === 0 || visibleCodes.every((code) => (metricTotals[code.id] ?? 0) === 0) ? <p className="dashboard-table__empty">暂无统计数据</p> : null}</article> : null}
@@ -151,14 +154,39 @@ export function DashboardView() {
         <div className="dashboard-table__row dashboard-table__head"><span>活码</span><span>类型</span><span>状态</span><span>最近更新</span><span>{metricOptions.find((item) => item.key === metric)?.label ?? "扫码"}次数</span></div>
         {visibleCodes.map((code) => {
           const status = codeStatusLabel(code);
-          return <Link className="dashboard-table__row" to={`/app/codes/${code.id}/qr`} key={code.id}><span><QrSpecimen data={`${window.location.origin}/s/${code.slug}`} size={72} />{code.title}</span><span>{typeLabels[code.contentType] ?? "活码"}</span><span><i className={`project-status project-status--${status}`}>{status}</i></span><time>{new Date(code.updatedAt).toLocaleString("zh-CN")}</time><strong>{metricTotals[code.id] ?? 0}</strong></Link>;
+          return <Link className="dashboard-table__row" to={`/app/codes/${code.id}/qr`} key={code.id}><span><QrSpecimen data={`${window.location.origin}/s/${code.slug}`} size={72} />{code.title}</span><span data-label="类型">{typeLabels[code.contentType] ?? "活码"}</span><span data-label="状态"><i className={`project-status project-status--${status}`}>{status}</i></span><time data-label="最近更新">{new Date(code.updatedAt).toLocaleString("zh-CN")}</time><strong data-label={`${metricOptions.find((item) => item.key === metric)?.label ?? "扫码"}次数`}>{metricTotals[code.id] ?? 0}</strong></Link>;
         })}
-        {visibleCodes.length === 0 ? <p className="dashboard-table__empty">暂无符合条件的活码</p> : null}
+        {visibleCodes.length === 0 ? <div className="dashboard-table__empty">
+          {codes.length === 0 && !hasSearchOrFilter ? <>
+            <QrCode aria-hidden="true" />
+            <strong>还没有活码</strong>
+            <p>创建第一张活码后，可在这里编辑内容、发布并查看访问情况。</p>
+            <button type="button" onClick={() => setCreating(true)}>创建第一张活码</button>
+          </> : <>
+            <strong>暂无符合条件的活码</strong>
+            <button type="button" onClick={() => { setFilter("全部"); setSearch(""); }}>清除搜索和筛选</button>
+          </>}
+        </div> : null}
       </div> : null}
 
-      {view !== "types" ? <aside className="recent-submissions paper-panel"><h2>最近编辑</h2>{codes.slice(0, 5).map((code, index) => <Link to={`/app/codes/${code.id}/qr`} key={code.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{code.title}</strong><small>{new Date(code.updatedAt).toLocaleString("zh-CN")}</small><ArrowRight /></Link>)}</aside> : null}
+      {view !== "types" ? <aside className="recent-submissions paper-panel"><h2>最近编辑</h2>{codes.slice(0, 5).map((code, index) => <Link to={`/app/codes/${code.id}/qr`} key={code.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{code.title}</strong><small>{new Date(code.updatedAt).toLocaleString("zh-CN")}</small><ArrowRight /></Link>)}{codes.length === 0 ? <p className="recent-submissions__empty">创建活码后，最近编辑的内容会显示在这里。</p> : null}</aside> : null}
 
-      {creating ? <div className="dashboard-create paper-panel" role="dialog" aria-modal="true" aria-labelledby="create-code-title"><h2 id="create-code-title">新建活码</h2>{createNotice ? <p role="alert">{createNotice}</p> : null}<label>活码名称<input value={newName} onChange={(event) => setNewName(event.target.value)} autoFocus /></label><label>内容类型<select value={newType} onChange={(event) => setNewType(event.target.value as CodeType)}>{contentTypeOptions.map(({ type, label }) => <option value={type} key={type}>{label}</option>)}</select></label><p className="dashboard-create__hint">图片、视频、音频和文件可在下一步上传，草稿不会写入虚假资源。</p><div><button type="button" onClick={() => setCreating(false)}>取消</button><button type="button" onClick={() => void createCode()}>创建并编辑</button></div></div> : null}
+      <Dialog.Root open={creating} onOpenChange={setCreating}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dashboard-create-overlay" />
+          <Dialog.Content className="dashboard-create">
+            <Dialog.Title className="dashboard-create__title">新建活码</Dialog.Title>
+            <Dialog.Description className="dashboard-create__hint">图片、视频、音频和文件可在下一步上传，草稿不会写入虚假资源。</Dialog.Description>
+            {createNotice ? <p className="dashboard-create__error" role="alert">{createNotice}</p> : null}
+            <label>活码名称<input value={newName} onChange={(event) => setNewName(event.target.value)} autoFocus /></label>
+            <label>内容类型<select value={newType} onChange={(event) => setNewType(event.target.value as CodeType)}>{contentTypeOptions.map(({ type, label }) => <option value={type} key={type}>{label}</option>)}</select></label>
+            <div className="dashboard-create__actions">
+              <Dialog.Close asChild><button type="button">取消</button></Dialog.Close>
+              <button type="button" onClick={() => void createCode()}>创建并编辑</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </section>
   </AppShell>;
 }
