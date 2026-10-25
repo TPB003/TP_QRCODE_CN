@@ -131,7 +131,7 @@ test.describe("QR editor workbench layout", () => {
 
     const imageAssetId = await uploadAsset("preview.png", "image/png", await readFile(path.join(process.cwd(), "tmp", "fixtures", "sample-image.png")));
     const videoAssetId = await uploadAsset("preview.mp4", "video/mp4", Buffer.from([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 1]));
-    const audioAssetId = await uploadAsset("preview.mp3", "audio/mpeg", Buffer.from([0x49, 0x44, 0x33, 0, 0, 0, 0, 0, 0, 0]));
+    const audioAssetId = await uploadAsset("preview.wav", "audio/wav", await readFile(path.join(process.cwd(), "tmp", "fixtures", "sample-audio.wav")));
     const fileAssetId = await uploadAsset("preview.pdf", "application/pdf", Buffer.from("%PDF-1.4\n"));
     const cases: Array<{ content: Record<string, unknown>; selector: string; expectedText?: string; expectedAlt?: string }> = [
       { content: { type: "image", assetId: imageAssetId, alt: "示例图片" }, selector: ".public-content-page--image .public-image-only", expectedAlt: "示例图片" },

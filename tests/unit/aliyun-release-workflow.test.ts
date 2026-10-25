@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const workflow = readFileSync(".github/workflows/release-aliyun.yml", "utf8");
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const compose = readFileSync("infra/aliyun/docker-compose.release.yml", "utf8");
 const deployClient = readFileSync("scripts/deploy-aliyun.sh", "utf8");
 const deploySsh = readFileSync("infra/aliyun/tpqr-deploy-ssh", "utf8");
@@ -29,6 +30,11 @@ describe("Aliyun production release", () => {
     expect(deploySsh).toContain("/usr/local/sbin/tpqr-deploy-root");
     expect(installer).toContain('restrict,command="/usr/local/sbin/tpqr-deploy-ssh"');
     expect(installer).not.toContain("usermod -aG docker");
+  });
+
+  it("validates production Compose with non-production placeholder values", () => {
+    expect(ciWorkflow).toContain("TPQR_DOMAIN=example.invalid docker compose");
+    expect(ciWorkflow).toContain("infra/aliyun/docker-compose.release.yml config --quiet");
   });
 
   it("keeps server configuration and persistent data outside versioned images", () => {
