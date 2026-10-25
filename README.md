@@ -29,7 +29,9 @@ data, personal QR codes, and generated reports are never committed.
   Escape. Editor, versions, analytics, settings, and decoder keep direct
   navigation back to the workbench.
 - Draft editing, readable content previews, revision checks, immutable
-  publishing, and QR style controls. Unsaved style changes warn before leaving;
+  publishing, and QR style controls. The editor keeps the QR image and the
+  current scan-result page visible together, including an in-place preview of
+  validated URL redirects. Unsaved style changes warn before leaving;
   publishing and code deletion use in-app confirmation dialogs.
 - Browser-generated PNG, SVG, WEBP, and JPG QR downloads, including optional
   frame text in the exported image.
@@ -48,7 +50,7 @@ data, personal QR codes, and generated reports are never committed.
 
 ```text
 login → workbench (overview/codes/types/analytics) → create or edit a code
-      → preview → confirm publish → render/download QR
+      → review QR and live scan-result previews → confirm publish → render/download QR
       → scan URL code and redirect / open other public content pages
       → download/share → republish
 ```
