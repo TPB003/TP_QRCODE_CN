@@ -61,8 +61,8 @@ async function request<T>(path: string, init: RequestInit = {}, schema?: ZodType
 
 export const apiClient = {
   get: <T>(path: string, schema?: ZodType<T>) => request(path, { method: "GET" }, schema),
-  post: <T>(path: string, data?: unknown, schema?: ZodType<T>) =>
-    request(path, { method: "POST", body: data instanceof FormData ? data : JSON.stringify(data ?? {}) }, schema),
+  post: <T>(path: string, data?: unknown, schema?: ZodType<T>, options: Pick<RequestInit, "keepalive"> = {}) =>
+    request(path, { method: "POST", body: data instanceof FormData ? data : JSON.stringify(data ?? {}), ...options }, schema),
   patch: <T>(path: string, data: unknown, schema?: ZodType<T>) =>
     request(path, { method: "PATCH", body: JSON.stringify(data) }, schema),
   delete: <T>(path: string, schema?: ZodType<T>) => request(path, { method: "DELETE" }, schema),

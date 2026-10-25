@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Download, ExternalLink, FileText, Share2 } from "lucide-react";
 import type { ActiveContent, PublicContentResponse } from "@tpqr/domain";
 import { toVCard, validateSafeUrl } from "@tpqr/content";
 import "./public-content-overrides.css";
 
 type PublicEvent = "view" | "click" | "download" | "play";
-type Props = { data: PublicContentResponse; onEvent?: (event: PublicEvent) => void };
+type Props = { data: PublicContentResponse; onEvent?: (event: PublicEvent) => void; autoRedirectUrl?: boolean };
 
 function assetUrl(data: PublicContentResponse, id: string) {
   return data.assets.find((asset) => asset.id === id)?.url ?? `/api/public/${encodeURIComponent(data.code.slug)}/assets/${encodeURIComponent(id)}`;
@@ -72,7 +72,7 @@ function contentTitle(content: ActiveContent): string {
   return "";
 }
 
-export function PublicContentFrame({ data, onEvent }: Props) {
+export function PublicContentFrame({ data, onEvent, autoRedirectUrl = false }: Props) {
   const { code } = data;
   const content = code.content;
   const copy = useCopy();
@@ -81,6 +81,19 @@ export function PublicContentFrame({ data, onEvent }: Props) {
   const title = imageOnly ? "" : contentTitle(content) || code.title;
   const pageClass = `public-content-page public-content-page--${content.type}`;
   const cardClass = `public-content-card public-content-card--${content.type}`;
+  const redirectRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!autoRedirectUrl || content.type !== "url") return;
+    const safe = validateSafeUrl(content.url);
+    if (!safe.ok || !safe.url) return;
+    const target = safe.url.toString();
+    const redirectKey = `${code.id}:${target}`;
+    if (redirectRef.current === redirectKey) return;
+    redirectRef.current = redirectKey;
+    onEvent?.("click");
+    window.location.replace(target);
+  }, [autoRedirectUrl, code.id, content, onEvent]);
 
   const share = async () => {
     onEvent?.("click");

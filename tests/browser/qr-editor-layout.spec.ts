@@ -59,6 +59,22 @@ test.describe("QR editor workbench layout", () => {
     await expect(page.getByRole("dialog", { name: "草稿预览" })).toHaveCount(0);
   });
 
+  test("keeps URL draft preview inside the editor", async ({ page }, testInfo) => {
+    await authenticate(page, `qr-url-preview-${Date.now()}-${testInfo.project.name}@active.tpqr.test`);
+    const created = await page.request.post("/api/codes", {
+      data: { title: "网址预览验收", content: { type: "url", title: "预览网址", url: "https://example.com/docs" } },
+    });
+    expect(created.status()).toBe(201);
+    const code = (await json<{ id: string }>(created)).data;
+    if (!code) throw new Error("code creation failed");
+
+    await page.goto(`/app/codes/${code.id}/qr`);
+    await page.getByRole("button", { name: "预览", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "草稿预览" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "安全打开" })).toHaveAttribute("href", "https://example.com/docs");
+    await expect(page).toHaveURL(new RegExp(`/app/codes/${code.id}/qr$`));
+  });
+
   test("keeps the mobile action bar usable at 375px", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile", "mobile viewport coverage");
     await page.setViewportSize({ width: 375, height: 812 });
