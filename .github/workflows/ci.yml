@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'edited' && 'issue-link-only' || 'checks' }}
   cancel-in-progress: true
 
 jobs:
@@ -35,6 +36,7 @@ jobs:
 
   verify:
     name: verify
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -50,6 +52,7 @@ jobs:
 
   aliyun-integration:
     name: aliyun-integration
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -64,6 +67,7 @@ jobs:
 
   security:
     name: security
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -77,6 +81,7 @@ jobs:
 
   browser-desktop:
     name: browser-desktop
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -93,6 +98,7 @@ jobs:
 
   browser-mobile:
     name: browser-mobile
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -109,6 +115,7 @@ jobs:
 
   docker-smoke:
     name: docker-smoke
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -126,6 +133,7 @@ jobs:
 
   opensource-boundary:
     name: opensource-boundary
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
