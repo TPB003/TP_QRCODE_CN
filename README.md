@@ -24,11 +24,13 @@ data, personal QR codes, and generated reports are never committed.
   linking. Google OAuth backend support is retained for later re-enabling, but
   its current UI entry is intentionally hidden.
 - An authenticated dashboard with separate overview, code list, content type,
-  and account analytics views. Code editor, versions, analytics, and settings
-  share direct navigation, and the decoder links back to the workbench or home.
-- Draft editing, preview, revision checks, immutable publishing, and QR style
-  controls. Unsaved style changes warn before leaving; publishing and code
-  deletion use in-app confirmation dialogs.
+  and account analytics views. New accounts see a clear empty state, code
+  details become readable cards on mobile, and the create dialog closes with
+  Escape. Editor, versions, analytics, settings, and decoder keep direct
+  navigation back to the workbench.
+- Draft editing, readable content previews, revision checks, immutable
+  publishing, and QR style controls. Unsaved style changes warn before leaving;
+  publishing and code deletion use in-app confirmation dialogs.
 - Browser-generated PNG, SVG, WEBP, and JPG QR downloads, including optional
   frame text in the exported image.
 - Private OSS media storage with MIME, file-signature, size, ownership, and
@@ -51,10 +53,15 @@ login → workbench (overview/codes/types/analytics) → create or edit a code
 ## Workbench navigation
 
 The workbench keeps the selected dashboard view visible in its navigation.
-Each code links to its editor, versions, scan analytics, and settings, while the
+Each code links to its editor, versions, scan analytics, and settings. On small
+screens, code details remain visible without a sideways-scrolling table. The
 decoder provides links back to the workbench and home.
 
-[![TP QR workbench navigation](assets/open/workbench-navigation.png)](assets/open/workbench-navigation.png)
+[![TP QR desktop workbench](assets/open/workbench-navigation.png)](assets/open/workbench-navigation.png)
+
+[![TP QR mobile code list](assets/open/workbench-mobile-codes.png)](assets/open/workbench-mobile-codes.png)
+
+[Editor preview](assets/open/workbench-editor.png) · [Published public content](assets/open/public-content-text.png)
 
 ```text
 editor ↔ versions / scan analytics / settings → decoder → workbench
