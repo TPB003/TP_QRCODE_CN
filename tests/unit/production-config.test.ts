@@ -31,6 +31,7 @@ describe("production storage configuration", () => {
     expect(() => assertProductionConfig(validProductionEnvironment())).not.toThrow();
     expect(() => assertProductionConfig({ ...validProductionEnvironment(), RESEND_API_KEY: " " })).toThrow("RESEND_API_KEY");
     expect(() => assertProductionConfig({ ...validProductionEnvironment(), APP_ORIGIN: "http://tpqrcode.example" })).toThrow("APP_ORIGIN must use HTTPS");
+    expect(() => assertProductionConfig({ ...validProductionEnvironment(), ENVIRONMENT: " production ", RESEND_API_KEY: "" })).toThrow("RESEND_API_KEY");
   });
 
   it("allows blank optional OSS fields and rejects partial OSS values in deployment preflight", async () => {

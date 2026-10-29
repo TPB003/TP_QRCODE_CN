@@ -61,6 +61,11 @@ for that bucket, then set all four `OSS_REGION`, `OSS_BUCKET`,
 local storage; a partial OSS configuration fails startup before database
 migrations run.
 
+For an installation that already has local uploads, copy every asset to OSS
+under the same object key and verify the objects before setting the OSS values.
+The application does not migrate or fall back to local files after OSS is
+enabled, so switching without this copy makes existing uploads unavailable.
+
 ## Resend and GitHub
 
 Verify the sending domain in Resend before using production email. Set

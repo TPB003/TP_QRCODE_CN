@@ -1,7 +1,7 @@
 import type { Bindings } from "./bindings";
 
 export function assertProductionConfig(environment: NodeJS.ProcessEnv = process.env): void {
-  if ((environment.ENVIRONMENT ?? "development") !== "production") return;
+  if (configuredEnvironment(environment) !== "production") return;
 
   const required = ["RESEND_API_KEY", "RESEND_FROM_EMAIL", "SESSION_COOKIE_SECRET"];
   const missing = required.filter((name) => !environment[name]?.trim());
