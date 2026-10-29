@@ -35,9 +35,9 @@ data, personal QR codes, and generated reports are never committed.
   publishing and code deletion use in-app confirmation dialogs.
 - Browser-generated PNG, SVG, WEBP, and JPG QR downloads, including optional
   frame text in the exported image.
-- Private OSS media storage with MIME, file-signature, size, ownership, and
-  download-name checks. A local filesystem adapter is used for development and
-  tests.
+- Persistent local media storage on Aliyun by default, with optional private
+  OSS storage. Both use the same API checks for MIME, file signature, size,
+  ownership, and download name.
 - Public content pages that adapt naturally to each content type, plus a QR
   decoder for camera/image input, URLs, text, vCards, and TP QR slugs, with a
   bundled image-decoding fallback when native QR detection is unavailable.
@@ -80,7 +80,8 @@ The application is a single-origin Node/Hono service behind Caddy:
 browser ── HTTPS ──> Caddy ── /api/* ──> Node 22 + Hono
                          └─ static ──> Vite dist
                                       ├─ SQLite /data/tpqr/tpqr.sqlite
-                                      └─ private Aliyun OSS (production)
+                                      └─ persistent local assets (/data/tpqr/assets)
+                                           └─ optional private Aliyun OSS
 ```
 
 The shared packages hold the content, API, QR, and UI contracts. Published
@@ -150,13 +151,13 @@ bucket name, OAuth secrets, or a Resend key.
 | `APP_ORIGIN` | Browser/API origin and safe redirect origin |
 | `PUBLIC_QR_ORIGIN` | Origin encoded into newly generated QR links |
 | `TPQR_DATABASE_PATH` | SQLite file path; production defaults to `/data/tpqr/tpqr.sqlite` |
-| `TPQR_ASSET_PATH` | Local asset path when OSS is not configured |
+| `TPQR_ASSET_PATH` | Persistent local asset path; production defaults to `/data/tpqr/assets` |
 | `AUTH_DELIVERY_MODE` | `dev` locally; `resend` in production |
 | `AUTH_TEST_CODE` | Development-only fixed code; never set in production |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` | Production verification-code delivery |
 | `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET` | GitHub App login |
 | `AUTH_OAUTH_CALLBACK_ORIGIN` | OAuth callback origin |
-| `OSS_REGION`, `OSS_BUCKET`, `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_ENDPOINT` | Local development may use filesystem storage; production requires a private Aliyun OSS bucket |
+| `OSS_REGION`, `OSS_BUCKET`, `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_ENDPOINT` | Optional private OSS configuration; leave the four core values blank to use local storage |
 | `SESSION_COOKIE_SECRET` | Required production-only deployment secret (32+ characters) |
 
 Production must use HTTPS, Resend, a verified sender domain, and no
@@ -198,13 +199,14 @@ docker compose -f infra/aliyun/docker-compose.yml -f infra/aliyun/docker-compose
 ```
 
 The local gateway listens on `http://127.0.0.1:8080`. On Ubuntu 24.04 ECS,
-keep `.env` mode 600, expose only 80/443, keep port 8787 internal, and use a
-private OSS bucket with a least-privilege RAM user. Caddy terminates HTTPS
+keep `.env` mode 600, expose only 80/443, and keep port 8787 internal. Uploaded
+assets persist on the host under `/opt/tpqr/data/assets`; private OSS with a
+least-privilege RAM user is optional. Caddy terminates HTTPS
 after the ICP-approved domain points to the ECS instance. The repository does
 not perform DNS changes or contain production credentials.
 
 See [`docs/deployment-aliyun.md`](docs/deployment-aliyun.md) for backups,
-rollback, Resend, GitHub App, OSS, and server hardening guidance.
+rollback, Resend, GitHub App, optional OSS, and server hardening guidance.
 
 ## Testing and release gate
 
