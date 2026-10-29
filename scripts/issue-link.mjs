@@ -2,14 +2,14 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export function closingIssueNumber(body) {
-  const matches = [...body.matchAll(/\bCloses\s+#([1-9]\d*)\b/gi)];
-  if (matches.length !== 1) throw new Error("PR description must contain exactly one Closes #N reference");
+export function referencedIssueNumber(body) {
+  const matches = [...body.matchAll(/\b(?:Closes|Refs)\s+#([1-9]\d*)\b/gi)];
+  if (matches.length !== 1) throw new Error("PR description must contain exactly one Closes #N or Refs #N reference");
   return Number(matches[0][1]);
 }
 
 export async function verifyIssueReference(body, repository, token, request = fetch) {
-  const issueNumber = closingIssueNumber(body);
+  const issueNumber = referencedIssueNumber(body);
   const response = await request(`https://api.github.com/repos/${repository}/issues/${issueNumber}`, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -47,3 +47,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     process.exitCode = 1;
   });
 }
+
