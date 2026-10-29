@@ -30,6 +30,18 @@ describe("Aliyun production release", () => {
     expect(deploySsh).toContain("/usr/local/sbin/tpqr-deploy-root");
     expect(installer).toContain('restrict,command="/usr/local/sbin/tpqr-deploy-ssh"');
     expect(installer).not.toContain("usermod -aG docker");
+    expect(installer).toContain("baseline_sha=$2");
+    expect(installer).toContain('ln -s "$baseline_dir" "$current_link.new"');
+  });
+
+  it("validates the current release before installing the restricted deployment user", () => {
+    expect(installer).toContain("running-release-sha");
+    expect(installer).toContain("the existing deployment state directory must be a real root-owned directory");
+    expect(installer).toContain("docker inspect -f '{{.Config.Image}}'");
+    expect(installer).toContain("/opt/tpqr/data");
+    expect(installer).toContain("aliyun_caddy-data");
+    expect(installer).toContain("aliyun_caddy-config");
+    expect(installer).toContain('ln -s "$baseline_dir" "$current_link.new"');
   });
 
   it("validates production Compose with non-production placeholder values", () => {
@@ -39,6 +51,7 @@ describe("Aliyun production release", () => {
 
   it("keeps server configuration and persistent data outside versioned images", () => {
     expect(compose).toContain("/opt/tpqr/.env");
+    expect(compose).toContain('HOST: "0.0.0.0"');
     expect(compose).toContain("/opt/tpqr/data:/data/tpqr");
     expect(compose).toContain("external: true");
     expect(compose).toContain("aliyun_caddy-data");
