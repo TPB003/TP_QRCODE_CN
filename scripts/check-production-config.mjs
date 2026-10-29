@@ -22,13 +22,10 @@ const required = [
   "RESEND_API_KEY",
   "RESEND_FROM_EMAIL",
   "SESSION_COOKIE_SECRET",
-  "OSS_REGION",
-  "OSS_BUCKET",
-  "OSS_ACCESS_KEY_ID",
-  "OSS_ACCESS_KEY_SECRET",
 ];
 const values = new Map(text.split(/\r?\n/u).map((line) => line.match(/^([A-Z0-9_]+)=(.*)$/u)).filter(Boolean).map((match) => [match[1], match[2]]));
-const missing = required.filter((name) => !values.get(name));
+const value = (name) => values.get(name)?.trim() ?? "";
+const missing = required.filter((name) => !value(name));
 if (missing.length > 0) {
   console.error(`production config is missing: ${missing.join(", ")}`);
   process.exit(1);
@@ -37,8 +34,15 @@ if (text.includes("replace-with-")) {
   console.error("production config still contains replace-with-* placeholders");
   process.exit(1);
 }
-if (environment === "production" && (values.get("ENVIRONMENT") !== "production" || !values.get("APP_ORIGIN")?.startsWith("https://") || !values.get("PUBLIC_QR_ORIGIN")?.startsWith("https://") || !values.get("AUTH_OAUTH_CALLBACK_ORIGIN")?.startsWith("https://") || values.get("AUTH_DELIVERY_MODE") !== "resend" || values.has("AUTH_TEST_CODE"))) {
-  console.error("production config must use HTTPS, Resend auth, no fixed code, and private OSS values");
+const ossNames = ["OSS_REGION", "OSS_BUCKET", "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"];
+const configuredOss = ossNames.filter((name) => value(name));
+const missingOss = ossNames.filter((name) => !value(name));
+if (configuredOss.length > 0 && missingOss.length > 0) {
+  console.error(`OSS configuration is incomplete; missing: ${missingOss.join(", ")}`);
+  process.exit(1);
+}
+if (environment === "production" && (value("ENVIRONMENT") !== "production" || !value("APP_ORIGIN").startsWith("https://") || !value("PUBLIC_QR_ORIGIN").startsWith("https://") || !value("AUTH_OAUTH_CALLBACK_ORIGIN").startsWith("https://") || value("AUTH_DELIVERY_MODE") !== "resend" || value("AUTH_TEST_CODE") || value("SESSION_COOKIE_SECRET").length < 32)) {
+  console.error("production config must use HTTPS, Resend auth, a 32-character session secret, and no fixed code");
   process.exit(1);
 }
 console.log(`production config preflight passed (${environment})`);

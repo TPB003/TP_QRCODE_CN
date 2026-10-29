@@ -1,9 +1,9 @@
 # Aliyun deployment
 
 The Aliyun edition runs as a small Docker Compose stack on an Ubuntu 24.04
-ECS instance. It uses Node.js 22, Hono, SQLite, private Object Storage
-Service (OSS), and Caddy. The repository never contains an ECS address,
-bucket name, OAuth secret, or Resend key.
+ECS instance. It uses Node.js 22, Hono, SQLite, persistent local asset storage,
+and Caddy. Private Object Storage Service (OSS) is optional. The repository
+never contains an ECS address, bucket name, OAuth secret, or Resend key.
 
 ## Local smoke test
 
@@ -47,11 +47,19 @@ Do not commit the server `.env` or a domain-specific Caddy configuration.
 
 ## OSS
 
-Create a private bucket and a dedicated RAM user with only object read/write/
-delete permissions for that bucket. Set `OSS_REGION`, `OSS_BUCKET`,
-`OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, and (if needed) `OSS_ENDPOINT`
-in the server-only `.env`. The API proxies assets, so clients never receive
-OSS credentials or object keys.
+By default, uploaded assets are stored in the persistent local directory set
+by `TPQR_ASSET_PATH` (`/data/tpqr/assets` in the container, backed by
+`/opt/tpqr/data/assets` on the ECS host). Keep this directory when updating or
+rolling back the application. The API proxies assets, so clients never receive
+storage credentials or internal object keys.
+
+OSS can be enabled later without changing the asset API. Create a private
+bucket and a dedicated RAM user with only object read/write/delete permissions
+for that bucket, then set all four `OSS_REGION`, `OSS_BUCKET`,
+`OSS_ACCESS_KEY_ID`, and `OSS_ACCESS_KEY_SECRET` values in the server-only
+`.env`. `OSS_ENDPOINT` is optional. Leave all four credentials empty to use
+local storage; a partial OSS configuration fails startup before database
+migrations run.
 
 ## Resend and GitHub
 
@@ -68,8 +76,10 @@ button is intentionally hidden in the current web app.
 
 ## Backup and rollback
 
-Stop the API before copying `/opt/tpqr/data/tpqr.sqlite` to a dated file in
-`/opt/tpqr/backups`, and upload that backup to a private OSS prefix. Keep the
-previous application image/release until the new version passes `/api/health`
-and the browser smoke test. Restoring the previous image does not delete the
-database or OSS objects.
+Stop the API before copying `/opt/tpqr/data/tpqr.sqlite` and the matching
+`/opt/tpqr/data/assets` directory to a dated backup under
+`/opt/tpqr/backups`. Keep the database and assets from the same backup point.
+If using OSS, back up its objects separately. Keep the previous application
+image/release until the new version passes `/api/health` and the browser smoke
+test. Restoring the previous image does not delete the database or local asset
+directory.

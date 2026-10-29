@@ -206,11 +206,16 @@ export function createBindings(options: RuntimeOptions): Bindings {
   };
 }
 
-export async function createOssBucketFromEnv(): Promise<AssetBucket | undefined> {
-  const { OSS_REGION, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET, OSS_BUCKET, OSS_ENDPOINT } = process.env;
-  if (!OSS_REGION || !OSS_ACCESS_KEY_ID || !OSS_ACCESS_KEY_SECRET || !OSS_BUCKET) return undefined;
+export async function createOssBucketFromEnv(environment: NodeJS.ProcessEnv = process.env): Promise<AssetBucket | undefined> {
+  const names = ["OSS_REGION", "OSS_BUCKET", "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"] as const;
+  const config = Object.fromEntries(names.map((name) => [name, environment[name]?.trim() ?? ""])) as Record<(typeof names)[number], string>;
+  const configured = names.filter((name) => config[name]);
+  if (configured.length === 0) return undefined;
+  const missing = names.filter((name) => !config[name]);
+  if (missing.length > 0) throw new Error(`OSS configuration is incomplete; missing: ${missing.join(", ")}`);
   const module = await import("ali-oss");
-  const client = new module.default({ region: OSS_REGION, accessKeyId: OSS_ACCESS_KEY_ID, accessKeySecret: OSS_ACCESS_KEY_SECRET, bucket: OSS_BUCKET, endpoint: OSS_ENDPOINT, secure: true });
+  const endpoint = environment.OSS_ENDPOINT?.trim();
+  const client = new module.default({ region: config.OSS_REGION, accessKeyId: config.OSS_ACCESS_KEY_ID, accessKeySecret: config.OSS_ACCESS_KEY_SECRET, bucket: config.OSS_BUCKET, endpoint: endpoint || undefined, secure: true });
   return new OssAssetBucket(client);
 }
 

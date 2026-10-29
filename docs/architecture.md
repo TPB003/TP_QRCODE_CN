@@ -8,7 +8,8 @@ publishing, analytics, and the private asset proxy.
 browser ── HTTPS ──> Caddy ── /api/* ──> Hono/Node
                          └─ static ──> Vite dist
                                       ├─ SQLite /data/tpqr/tpqr.sqlite
-                                      └─ private OSS (optional production)
+                                      └─ persistent local assets (/data/tpqr/assets)
+                                           └─ private OSS (optional)
 ```
 
 Published QR versions are immutable. Seven content types are validated by the

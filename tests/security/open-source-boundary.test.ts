@@ -18,8 +18,10 @@ describe("open-source boundary", () => {
   it("does not expose a concrete host or storage credential in deployment templates", () => {
     const template = path.join(repositoryRoot, "infra/aliyun/env.example");
     const content = readFileSync(template, "utf8");
-    expect(content).toContain("replace-with-your-oss-bucket");
-    for (const line of content.split(/\r?\n/u).filter((value) => /(?:KEY|SECRET)=/u.test(value))) {
+    for (const name of ["OSS_REGION", "OSS_BUCKET", "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET"]) {
+      expect(content).toMatch(new RegExp(`^${name}=$`, "m"));
+    }
+    for (const line of content.split(/\r?\n/u).filter((value) => /(?:KEY|SECRET)=/u.test(value) && !value.startsWith("OSS_"))) {
       expect(line).toMatch(/=replace-with-/u);
     }
   });
