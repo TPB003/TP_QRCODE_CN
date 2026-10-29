@@ -205,9 +205,13 @@ least-privilege RAM user is optional. Caddy terminates HTTPS
 after the ICP-approved domain points to the ECS instance. The repository does
 not perform DNS changes or contain production credentials.
 
-See [`docs/deployment-aliyun.md`](docs/deployment-aliyun.md) for backups,
-rollback, Resend, GitHub App, optional OSS, and server hardening guidance.
+After one-time server baseline and protected-environment setup, a successful
+CI run on `main` can trigger an immutable image release with API and public QR
+smoke checks. Production deployment remains disabled until that setup is
+verified; see the release procedure in the deployment guide.
 
+See [`docs/deployment-aliyun.md`](docs/deployment-aliyun.md) for backups,
+rollback, GitHub Actions releases, Resend, GitHub App, optional OSS, and server hardening guidance.
 ## Testing and release gate
 
 From a clean checkout:
