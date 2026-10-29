@@ -31,4 +31,3 @@ describe("pull request issue links", () => {
     await expect(verifyIssueReference("Closes #29", "TPB003/TP_QRCODE_CN", "test-token", pullRequest as unknown as typeof fetch)).rejects.toThrow("not an issue");
   });
 });
-
