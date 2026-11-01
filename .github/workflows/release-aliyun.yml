@@ -98,7 +98,7 @@ jobs:
           cp infra/aliyun/docker-compose.release.yml "$RUNNER_TEMP/tpqr-release/"
           tar -cf "$RUNNER_TEMP/tpqr-release.tar" \
             -C "$RUNNER_TEMP/tpqr-release" images.tar.gz docker-compose.release.yml
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: tpqr-release-${{ steps.source.outputs.commit_sha }}
           path: ${{ runner.temp }}/tpqr-release.tar
