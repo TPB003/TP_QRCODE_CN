@@ -121,7 +121,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.preflight.outputs.commit_sha }}
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: tpqr-release-${{ needs.preflight.outputs.commit_sha }}
           path: ${{ runner.temp }}/tpqr-release
