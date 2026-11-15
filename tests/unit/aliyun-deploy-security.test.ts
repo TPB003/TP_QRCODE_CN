@@ -25,17 +25,25 @@ function createTempDirectory(prefix: string): string {
 
 const releaseSha = "a".repeat(40);
 
-function createImageArchive(directory: string, extraTag = false, badRevisionLabel = false): Buffer {
+function createImageArchive(
+  directory: string,
+  extraTag = false,
+  badRevisionLabel = false,
+  blobAddressedConfigs = false,
+): Buffer {
   const source = join(directory, "docker-save");
   mkdirSync(join(source, "api"), { recursive: true });
   mkdirSync(join(source, "gateway"), { recursive: true });
+  const apiConfigPath = blobAddressedConfigs ? `blobs/sha256/${"1".repeat(64)}` : "api.json";
+  const gatewayConfigPath = blobAddressedConfigs ? `blobs/sha256/${"2".repeat(64)}` : "gateway.json";
+  mkdirSync(join(source, "blobs", "sha256"), { recursive: true });
   writeFileSync(
-    join(source, "api.json"),
+    join(source, apiConfigPath),
     JSON.stringify({ config: { Labels: { "org.opencontainers.image.revision": badRevisionLabel ? "b".repeat(40) : releaseSha } } }),
   );
   writeFileSync(join(source, "api", "layer.tar"), "api layer");
   writeFileSync(
-    join(source, "gateway.json"),
+    join(source, gatewayConfigPath),
     JSON.stringify({ config: { Labels: { "org.opencontainers.image.revision": releaseSha } } }),
   );
   writeFileSync(join(source, "gateway", "layer.tar"), "gateway layer");
@@ -43,14 +51,14 @@ function createImageArchive(directory: string, extraTag = false, badRevisionLabe
     join(source, "manifest.json"),
     JSON.stringify([
       {
-        Config: "api.json",
+        Config: apiConfigPath,
         RepoTags: extraTag
           ? [`tpqr-cn-api:${releaseSha}`, "other-image:latest"]
           : [`tpqr-cn-api:${releaseSha}`],
         Layers: ["api/layer.tar"],
       },
       {
-        Config: "gateway.json",
+        Config: gatewayConfigPath,
         RepoTags: [`tpqr-cn-gateway:${releaseSha}`],
         Layers: ["gateway/layer.tar"],
       },
@@ -63,20 +71,26 @@ function createImageArchive(directory: string, extraTag = false, badRevisionLabe
     "-C",
     source,
     "manifest.json",
-    "api.json",
+    apiConfigPath,
     "api/layer.tar",
-    "gateway.json",
+    gatewayConfigPath,
     "gateway/layer.tar",
   ]);
   return gzipSync(readFileSync(dockerTar));
 }
 
-function createBundle(directory: string, names: string[] = ["images.tar.gz"], extraTag = false, badRevisionLabel = false): string {
+function createBundle(
+  directory: string,
+  names: string[] = ["images.tar.gz"],
+  extraTag = false,
+  badRevisionLabel = false,
+  blobAddressedConfigs = false,
+): string {
   const source = join(directory, "source");
   mkdirSync(source, { recursive: true });
   for (const name of names) {
     const contents = name === "images.tar.gz"
-      ? createImageArchive(directory, extraTag, badRevisionLabel)
+      ? createImageArchive(directory, extraTag, badRevisionLabel, blobAddressedConfigs)
       : Buffer.from("extra bundle member");
     writeFileSync(join(source, name), contents);
   }
@@ -98,6 +112,14 @@ describe("Aliyun deployment input validation", () => {
     expect(result.stdout).toContain("bundle accepted");
   });
 
+  shellIt("accepts Docker archives with blob-addressed image configs", () => {
+    const directory = createTempDirectory("tpqr-deploy-test-");
+    const archive = createBundle(directory, ["images.tar.gz"], false, false, true);
+    const result = validateBundle(archive);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("bundle accepted");
+  });
+
   shellIt("rejects extra bundle members and path traversal entries", () => {
     const directory = createTempDirectory("tpqr-deploy-test-");
     const extraArchive = createBundle(directory, ["images.tar.gz", "extra.txt"]);
@@ -105,7 +127,7 @@ describe("Aliyun deployment input validation", () => {
 
     const source = join(directory, "traversal-source");
     mkdirSync(source);
-    writeFileSync(join(source, "escape"), gzipSync(Buffer.from("escape")));
+    writeFileSync(join(directory, "escape"), gzipSync(Buffer.from("escape")));
     const traversalArchive = join(directory, "traversal.tar");
     execFileSync("tar", ["-cf", traversalArchive, "--absolute-names", "-C", source, "../escape"]);
     expect(validateBundle(traversalArchive).status).not.toBe(0);

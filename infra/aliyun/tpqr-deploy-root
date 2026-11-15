@@ -81,7 +81,15 @@ try:
                     if total_size > 8589934592:
                         raise ValueError("Docker archive exceeds the expanded size limit")
                     regular_files.add(name)
-                if member.isfile() and "/" not in name and name.endswith(".json"):
+                is_config_candidate = (
+                    "/" not in name and name.endswith(".json")
+                ) or (
+                    len(parts) == 3
+                    and parts[:2] == ["blobs", "sha256"]
+                    and len(parts[2]) == 64
+                    and all(character in "0123456789abcdef" for character in parts[2])
+                )
+                if member.isfile() and (name == "manifest.json" or is_config_candidate):
                     if member.size > 1048576 and name == "manifest.json":
                         raise ValueError("invalid Docker manifest")
                     if member.size <= 1048576:
@@ -96,7 +104,7 @@ try:
                             raise ValueError("Docker JSON metadata is truncated")
                         if name == "manifest.json":
                             manifest_entries = json.loads(contents)
-                        else:
+                        elif is_config_candidate:
                             small_json_files[name] = contents
         while limited.read(1048576):
             pass
