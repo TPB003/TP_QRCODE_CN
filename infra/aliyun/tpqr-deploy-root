@@ -1,6 +1,182 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+validate_release_bundle() {
+  local archive=$1
+  local extract_dir=$2
+  local member_listing
+  local image_archive
+
+  [[ -f "$archive" && ! -L "$archive" ]]
+  [[ $(stat -c %s "$archive") -le 2147483648 ]]
+  member_listing=$(tar -tf "$archive")
+  [[ "$member_listing" == images.tar.gz ]]
+  tar -tvf "$archive" | awk '
+    $1 !~ /^-/ || $3 !~ /^[0-9]+$/ || $3 > 2147483648 || $NF != "images.tar.gz" {
+      invalid = 1
+    }
+    END { exit invalid || NR != 1 }
+  '
+
+  install -d -o "$(id -u)" -g "$(id -g)" -m 0700 "$extract_dir"
+  tar -xf "$archive" -C "$extract_dir" --no-same-owner --no-same-permissions -- images.tar.gz
+  image_archive="$extract_dir/images.tar.gz"
+  [[ -f "$image_archive" && ! -L "$image_archive" && -s "$image_archive" ]]
+}
+
+validate_docker_archive() {
+  python3 - "$1" "$2" <<'PY'
+import gzip
+import json
+import sys
+import tarfile
+
+class LimitedReader:
+    def __init__(self, stream, limit):
+        self.stream = stream
+        self.limit = limit
+        self.total = 0
+
+    def read(self, size=-1):
+        if size is None or size < 0:
+            size = 1048576
+        size = min(size, self.limit - self.total + 1)
+        data = self.stream.read(size)
+        self.total += len(data)
+        if self.total > self.limit:
+            raise ValueError("Docker archive exceeds the expanded size limit")
+        return data
+
+archive_path, release_sha = sys.argv[1:]
+expected_tags = {f"tpqr-cn-api:{release_sha}", f"tpqr-cn-gateway:{release_sha}"}
+regular_files = set()
+seen_names = set()
+manifest_entries = None
+small_json_files = {}
+json_bytes = 0
+total_size = 0
+
+try:
+    with gzip.open(archive_path, "rb") as compressed:
+        limited = LimitedReader(compressed, 8589934592)
+        with tarfile.open(fileobj=limited, mode="r|") as archive:
+            member_count = 0
+            for member in archive:
+                member_count += 1
+                name = member.name.rstrip("/")
+                parts = name.split("/")
+                if (
+                    member_count > 100000
+                    or not name
+                    or name.startswith("/")
+                    or any(part in {"", ".", ".."} for part in parts)
+                    or name in seen_names
+                    or not (member.isfile() or member.isdir())
+                    or member.size > 8589934592
+                ):
+                    raise ValueError("unsafe Docker archive member")
+                seen_names.add(name)
+                if member.isfile():
+                    total_size += member.size
+                    if total_size > 8589934592:
+                        raise ValueError("Docker archive exceeds the expanded size limit")
+                    regular_files.add(name)
+                is_config_candidate = (
+                    "/" not in name and name.endswith(".json")
+                ) or (
+                    len(parts) == 3
+                    and parts[:2] == ["blobs", "sha256"]
+                    and len(parts[2]) == 64
+                    and all(character in "0123456789abcdef" for character in parts[2])
+                )
+                if member.isfile() and (name == "manifest.json" or is_config_candidate):
+                    if member.size > 1048576 and name == "manifest.json":
+                        raise ValueError("invalid Docker manifest")
+                    if member.size <= 1048576:
+                        json_bytes += member.size
+                        if json_bytes > 8388608:
+                            raise ValueError("Docker archive JSON metadata is too large")
+                        source = archive.extractfile(member)
+                        if source is None:
+                            raise ValueError("Docker JSON metadata is unreadable")
+                        contents = source.read(1048577)
+                        if len(contents) != member.size:
+                            raise ValueError("Docker JSON metadata is truncated")
+                        if name == "manifest.json":
+                            manifest_entries = json.loads(contents)
+                        elif is_config_candidate:
+                            small_json_files[name] = contents
+        while limited.read(1048576):
+            pass
+except (OSError, tarfile.TarError, ValueError, json.JSONDecodeError) as error:
+    print(str(error), file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(manifest_entries, list) or len(manifest_entries) != 2:
+    sys.exit("Docker archive must contain exactly two images")
+
+tags = []
+for entry in manifest_entries:
+    if not isinstance(entry, dict):
+        sys.exit("invalid Docker manifest entry")
+    repo_tags = entry.get("RepoTags")
+    config = entry.get("Config")
+    layers = entry.get("Layers")
+    if (
+        not isinstance(repo_tags, list)
+        or len(repo_tags) != 1
+        or not all(isinstance(tag, str) for tag in repo_tags)
+        or not isinstance(config, str)
+        or not isinstance(layers, list)
+        or not all(isinstance(layer, str) for layer in layers)
+        or config not in regular_files
+        or config not in small_json_files
+        or any(layer not in regular_files for layer in layers)
+    ):
+        sys.exit("invalid or incomplete Docker image entry")
+    try:
+        image_config = json.loads(small_json_files[config])
+    except (TypeError, json.JSONDecodeError):
+        sys.exit("invalid Docker image config")
+    image_config_body = image_config.get("config") if isinstance(image_config, dict) else None
+    labels = image_config_body.get("Labels") if isinstance(image_config_body, dict) else None
+    if not isinstance(labels, dict) or labels.get("org.opencontainers.image.revision") != release_sha:
+        sys.exit("Docker image revision label does not match the release SHA")
+    tags.extend(repo_tags)
+
+if len(tags) != 2 or set(tags) != expected_tags:
+    sys.exit("Docker archive contains unexpected image tags")
+PY
+}
+
+assert_safe_root_directory() {
+  local path=$1
+  local mode
+  [[ -d "$path" && ! -L "$path" ]]
+  [[ $(stat -c '%u:%g' "$path") == 0:0 ]]
+  mode=$(stat -c '%a' "$path")
+  (( (8#$mode & 0022) == 0 ))
+}
+
+assert_safe_root_file() {
+  local path=$1
+  local expected_mode=$2
+  [[ -f "$path" && ! -L "$path" ]]
+  [[ $(stat -c '%u:%g' "$path") == 0:0 ]]
+  [[ $(stat -c '%a' "$path") == "$expected_mode" ]]
+}
+
+if [[ $# -eq 3 && "$1" == --validate-bundle ]]; then
+  release_sha=$2
+  [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+  test_dir=$(mktemp -d)
+  trap 'rm -rf "$test_dir"' EXIT
+  validate_release_bundle "$3" "$test_dir/extracted"
+  validate_docker_archive "$test_dir/extracted/images.tar.gz" "$release_sha"
+  echo "bundle accepted"
+  exit 0
+fi
+
 if [[ $# -ne 2 ]]; then
   echo "invalid deployment arguments" >&2
   exit 64
@@ -13,69 +189,76 @@ smoke_slug=$2
 [[ $(id -u) -eq 0 ]]
 [[ -f /opt/tpqr/.env ]]
 
-release_root=/var/lib/tpqr-deploy/releases
 state_root=/var/lib/tpqr-deploy
+release_root="$state_root/releases"
+fixed_compose_dir=/etc/tpqr-deploy
+fixed_compose="$fixed_compose_dir/docker-compose.release.yml"
 current_link="$state_root/current"
 previous_link="$state_root/previous"
 release_dir="$release_root/$release_sha"
-install -d -o root -g root -m 0750 "$release_root"
+
+assert_safe_root_directory "$state_root"
+assert_safe_root_directory "$release_root"
+assert_safe_root_directory "$fixed_compose_dir"
+assert_safe_root_file "$fixed_compose" 644
+for path in "$current_link" "$previous_link"; do
+  if [[ -e "$path" && ! -L "$path" ]]; then
+    echo "deployment state path is not a symbolic link: $path" >&2
+    exit 1
+  fi
+done
+
 incoming_dir=$(mktemp -d "$release_root/.incoming-${release_sha}.XXXXXX")
 trap 'rm -rf "$incoming_dir"' EXIT
-
 archive="$incoming_dir/release.tar"
 cat > "$archive"
-[[ $(stat -c %s "$archive") -le 2147483648 ]]
-mapfile -t members < <(tar -tf "$archive" | LC_ALL=C sort)
-expected_members=$(printf '%s\n' docker-compose.release.yml images.tar.gz | LC_ALL=C sort)
-actual_members=$(printf '%s\n' "${members[@]}")
-[[ "$actual_members" == "$expected_members" ]]
-tar -tvf "$archive" | awk 'substr($0, 1, 1) != "-" { invalid = 1 } END { exit invalid || NR != 2 }'
-mkdir "$incoming_dir/extracted"
-tar -xf "$archive" -C "$incoming_dir/extracted" --no-same-owner --no-same-permissions
-[[ -s "$incoming_dir/extracted/images.tar.gz" ]]
-[[ -s "$incoming_dir/extracted/docker-compose.release.yml" ]]
+validate_release_bundle "$archive" "$incoming_dir/extracted"
 
-if [[ -e "$release_dir" && ! -d "$release_dir" ]] || [[ -L "$release_dir" ]]; then
-  echo "release path is not a regular directory" >&2
-  exit 1
+if [[ -e "$release_dir" || -L "$release_dir" ]]; then
+  assert_safe_root_directory "$release_dir"
+  image_archive="$release_dir/images.tar.gz"
+  assert_safe_root_file "$image_archive" 640
+else
+  staged_release="$incoming_dir/release"
+  install -d -o root -g root -m 0750 "$staged_release"
+  install -o root -g root -m 0640 "$incoming_dir/extracted/images.tar.gz" "$staged_release/images.tar.gz"
+  mv -T "$staged_release" "$release_dir"
+  image_archive="$release_dir/images.tar.gz"
 fi
-if [[ ! -d "$release_dir" ]]; then
-  install -d -o root -g root -m 0750 "$release_dir"
-  install -o root -g root -m 0640 "$incoming_dir/extracted/images.tar.gz" "$release_dir/images.tar.gz"
-  install -o root -g root -m 0640 "$incoming_dir/extracted/docker-compose.release.yml" "$release_dir/docker-compose.release.yml"
-fi
+
+validate_docker_archive "$image_archive" "$release_sha"
+docker load < "$image_archive" >/dev/null
+[[ $(docker image inspect "tpqr-cn-api:$release_sha" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}') == "$release_sha" ]]
+[[ $(docker image inspect "tpqr-cn-gateway:$release_sha" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}') == "$release_sha" ]]
 
 compose_release() {
   local sha=$1
-  local compose_file=$2
   TPQR_RELEASE="$sha" TPQR_RUNTIME_ENV_FILE=/opt/tpqr/.env docker compose \
     --project-name aliyun \
     --env-file /opt/tpqr/.env \
-    -f "$compose_file" \
+    -f "$fixed_compose" \
     up -d --no-build --pull never
 }
 
 internal_api_healthy() {
   local sha=$1
-  local compose_file=$2
   TPQR_RELEASE="$sha" TPQR_RUNTIME_ENV_FILE=/opt/tpqr/.env docker compose \
     --project-name aliyun \
     --env-file /opt/tpqr/.env \
-    -f "$compose_file" \
+    -f "$fixed_compose" \
     exec -T api node -e 'fetch("http://127.0.0.1:8787/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' \
     >/dev/null 2>&1
 }
 
 release_health_checks() {
   local sha=$1
-  local compose_file=$2
   for _ in $(seq 1 24); do
-    if internal_api_healthy "$sha" "$compose_file"; then
+    if internal_api_healthy "$sha"; then
       break
     fi
     sleep 5
   done
-  internal_api_healthy "$sha" "$compose_file" && public_flow_healthy
+  internal_api_healthy "$sha" && public_flow_healthy
 }
 
 public_flow_healthy() {
@@ -88,13 +271,7 @@ public_flow_healthy() {
   curl --fail --silent --show-error --output /dev/null --retry 5 --retry-all-errors --retry-delay 2 --max-time 15 "$origin/api/public/$smoke_slug"
 }
 
-release_compose="$release_dir/docker-compose.release.yml"
-if ! docker load < "$release_dir/images.tar.gz" >/dev/null; then
-  echo "release image load failed" >&2
-  exit 1
-fi
-
-if compose_release "$release_sha" "$release_compose" && release_health_checks "$release_sha" "$release_compose"; then
+if compose_release "$release_sha" && release_health_checks "$release_sha"; then
   if [[ -L "$current_link" ]]; then
     old_current=$(readlink -f "$current_link")
     case "$old_current" in
@@ -123,8 +300,8 @@ case "$rollback_dir" in
   "$release_root"/*)
     rollback_sha=${rollback_dir##*/}
     if [[ "$rollback_sha" =~ ^[0-9a-f]{40}$ ]] \
-      && compose_release "$rollback_sha" "$rollback_dir/docker-compose.release.yml" \
-      && release_health_checks "$rollback_sha" "$rollback_dir/docker-compose.release.yml"; then
+      && compose_release "$rollback_sha" \
+      && release_health_checks "$rollback_sha"; then
       rollback_ok=true
     fi
     ;;

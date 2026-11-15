@@ -19,7 +19,7 @@ The local gateway listens on `http://127.0.0.1:8080`. Keep the generated
 
 ## ECS setup
 
-Install Docker and Compose on Ubuntu, then create `/opt/tpqr` with mode 700:
+Install Docker, Compose, and Python 3 on Ubuntu, then create `/opt/tpqr` with mode 700:
 
 ```bash
 sudo mkdir -p /opt/tpqr/{data,backups,releases}
@@ -114,12 +114,13 @@ ssh-keygen -t ed25519 -a 64 -N '' -f tpqr-aliyun-deploy
 
 Verify the ECS SSH host fingerprint through the Alibaba Cloud console before
 adding it to `known_hosts`. The public key is installed with the one-time root
-bootstrap. Copy these four files to a temporary directory on the server:
+bootstrap. Copy these five files to a temporary directory on the server:
 
 ```text
 infra/aliyun/install-deploy-user.sh
 infra/aliyun/tpqr-deploy-ssh
 infra/aliyun/tpqr-deploy-root
+infra/aliyun/docker-compose.release.yml
 tpqr-aliyun-deploy.pub
 ```
 
@@ -132,19 +133,28 @@ docker inspect --format '{{.Config.Image}}' aliyun-tpqr-gateway-1
 ```
 
 The matching release directory under `/var/lib/tpqr-deploy/releases/<sha>`
-must contain a root-owned `docker-compose.release.yml`. Run
-`install-deploy-user.sh tpqr-aliyun-deploy.pub <sha>` as root from the temporary
-directory, replacing `<sha>` with the verified image tag. The installer checks
-the live images, Compose file, health, data mount, and Caddy volumes before it
-creates `/var/lib/tpqr-deploy/current` as the rollback baseline. It reuses the
-existing deployment-state directory without replacing its release files.
+must contain the baseline `docker-compose.release.yml` from the currently
+running release. Run `install-deploy-user.sh tpqr-aliyun-deploy.pub <sha>` as
+root from the temporary directory, replacing `<sha>` with the verified image
+tag. The installer checks the live images, baseline Compose file, health, data
+mount, and Caddy volumes. It also validates the staged Compose file against the
+server `.env`, then installs it once as root-owned
+`/etc/tpqr-deploy/docker-compose.release.yml`. It creates
+`/var/lib/tpqr-deploy/current` as the rollback baseline and reuses the existing
+deployment-state directory without replacing its release files.
 
 The installer creates `tpqr-deploy`, locks its password, keeps it out of the
 Docker group, restricts the public key to one fixed command, and allows that
-command to call only the root-owned deployment helper. The helper accepts an
-image bundle and a commit SHA; it does not accept a shell command. Remove the
-temporary copy after installation. The root login key remains on the
-administrator's workstation and is never added to GitHub.
+command to call only the root-owned deployment helper. The helper accepts a
+commit SHA, smoke slug, and a bundle containing only the compressed image
+archive. It validates the outer bundle's member name, type, and size, along
+with the compressed Docker archive's tags, paths, and expanded size. It then
+uses the fixed server-owned Compose file. A release bundle cannot supply or
+replace Compose configuration. Changes to the server Compose file are a
+separate administrator operation and must be reviewed and validated before
+installing. Deployments retain `/opt/tpqr/.env`, SQLite data, uploads, backups,
+and Caddy volumes. Remove the temporary copy after installation. The root login
+key remains on the administrator's workstation and is never added to GitHub.
 
 ### GitHub settings
 

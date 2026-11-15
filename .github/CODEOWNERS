@@ -1,0 +1,7 @@
+/.github/workflows/ @TPB003
+/.github/CODEOWNERS @TPB003
+/infra/aliyun/Dockerfile @TPB003
+/infra/aliyun/docker-compose.release.yml @TPB003
+/infra/aliyun/tpqr-deploy-* @TPB003
+/infra/aliyun/install-deploy-user.sh @TPB003
+/scripts/deploy-aliyun.sh @TPB003
