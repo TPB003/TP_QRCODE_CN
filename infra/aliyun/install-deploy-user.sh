@@ -13,6 +13,12 @@ fi
 
 public_key_file=$1
 baseline_sha=$2
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required for safe Docker archive validation" >&2
+  exit 1
+fi
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+staged_compose="$script_dir/docker-compose.release.yml"
 read -r key_type key_data _ < "$public_key_file"
 if [[ "$key_type" != ssh-ed25519 || ! "$key_data" =~ ^[A-Za-z0-9+/=]+$ ]]; then
   echo "the deployment key must be an Ed25519 public key" >&2
@@ -30,6 +36,7 @@ for path in \
   /usr/local/sbin/tpqr-deploy-ssh \
   /usr/local/sbin/tpqr-deploy-root \
   /etc/sudoers.d/tpqr-deploy \
+  /etc/tpqr-deploy \
   /home/tpqr-deploy
 do
   if [[ -e "$path" || -L "$path" ]]; then
@@ -52,6 +59,10 @@ if [[ -e "$current_link" || -L "$current_link" || -e "$previous_link" || -L "$pr
 fi
 if [[ ! -d "$baseline_dir" || -L "$baseline_dir" || ! -f "$baseline_compose" || -L "$baseline_compose" ]]; then
   echo "the running release directory or Compose file is missing" >&2
+  exit 1
+fi
+if [[ ! -f "$staged_compose" || -L "$staged_compose" ]]; then
+  echo "the reviewed docker-compose.release.yml must be staged beside this installer" >&2
   exit 1
 fi
 if [[ $(stat -c '%u' "$baseline_dir") != 0 || $(stat -c '%u' "$baseline_compose") != 0 || ! -f /opt/tpqr/.env || $(stat -c '%u' /opt/tpqr/.env) != 0 ]]; then
@@ -85,8 +96,12 @@ run_baseline_compose exec -T api node -e 'fetch("http://127.0.0.1:8787/api/healt
 app_origin=$(awk -F= '$1 == "APP_ORIGIN" { sub(/^[^=]*=/, ""); print; exit }' /opt/tpqr/.env)
 [[ "$app_origin" == https://* ]]
 curl --fail --silent --show-error --output /dev/null --max-time 15 "$app_origin/api/health"
+TPQR_RELEASE="$baseline_sha" TPQR_RUNTIME_ENV_FILE=/opt/tpqr/.env docker compose \
+  --project-name aliyun \
+  --env-file /opt/tpqr/.env \
+  -f "$staged_compose" \
+  config --quiet
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 sudoers_file=$(mktemp)
 trap 'rm -f "$sudoers_file"' EXIT
 printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/tpqr-deploy-root *\n' tpqr-deploy > "$sudoers_file"
@@ -103,6 +118,8 @@ chown tpqr-deploy:tpqr-deploy /home/tpqr-deploy/.ssh/authorized_keys
 chmod 0600 /home/tpqr-deploy/.ssh/authorized_keys
 install -o root -g root -m 0440 "$sudoers_file" /etc/sudoers.d/tpqr-deploy
 visudo -cf /etc/sudoers.d/tpqr-deploy >/dev/null
+install -d -o root -g root -m 0750 /etc/tpqr-deploy
+install -o root -g root -m 0644 "$staged_compose" /etc/tpqr-deploy/docker-compose.release.yml
 ln -s "$baseline_dir" "$current_link.new"
 mv -Tf "$current_link.new" "$current_link"
 

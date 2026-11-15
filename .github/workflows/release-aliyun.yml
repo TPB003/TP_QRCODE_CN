@@ -66,12 +66,12 @@ jobs:
           fi
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
           echo "commit_sha=$release_sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ steps.source.outputs.commit_sha }}
       - name: Run full checks for a manual release
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
           cache: npm
@@ -95,10 +95,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/tpqr-release"
           docker save "tpqr-cn-api:$RELEASE_SHA" "tpqr-cn-gateway:$RELEASE_SHA" \
             | gzip -1 > "$RUNNER_TEMP/tpqr-release/images.tar.gz"
-          cp infra/aliyun/docker-compose.release.yml "$RUNNER_TEMP/tpqr-release/"
           tar -cf "$RUNNER_TEMP/tpqr-release.tar" \
-            -C "$RUNNER_TEMP/tpqr-release" images.tar.gz docker-compose.release.yml
-      - uses: actions/upload-artifact@v6
+            -C "$RUNNER_TEMP/tpqr-release" images.tar.gz
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: tpqr-release-${{ steps.source.outputs.commit_sha }}
           path: ${{ runner.temp }}/tpqr-release.tar
@@ -118,10 +117,10 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.preflight.outputs.commit_sha }}
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: tpqr-release-${{ needs.preflight.outputs.commit_sha }}
           path: ${{ runner.temp }}/tpqr-release
